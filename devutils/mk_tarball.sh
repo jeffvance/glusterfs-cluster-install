@@ -2,20 +2,14 @@
 #
 # This script creates the install tarball package. Currently this includes the
 # following files:
-#  * rhs-ambari-install-<verison> directory whicn contains:
+#  * fedora-hadoop-install-<verison> directory whicn contains:
 #  - install.sh
 #  - README.txt
 #  - hosts.example
-#  - Ambari_Configuration_Guide.pdf (not .odt version)
 #  - data/: directory containing:
 #    - prep_node.sh
-#    - gluster-hadoop-<version>.jar
-#    - fuse-patch.tar.gz
-#    - ambari.repo
-#    - ambari-<version>.rpms.tar.gz
-#
-# The Ambari_Configuration_Guide.pdf file is exported from the git
-# Ambari_Installation_Guide.odt file prior to creating the tarball.
+#    - gluster-hadoop-<version>.jar ?? or wget
+#    - fuse-patch.tar.gz ?? or wget
 #
 # This script is expected to be run from a git repo so that source version
 # info can be used in the tarball filename. The --source and --target-dir
@@ -29,23 +23,23 @@
 #
 function usage(){
 
-  echo -e "\nThis script converts the install guide .odt document file to pdf (if the"
-  echo "doc file is present) and creates the RHS-Ambari install tarball package. There"
-  echo "are no required parameters."
-  echo
-  echo "SYNTAX:"
-  echo
-  echo "  --source     : the directory containing the source files used to create the"
-  echo "                 tarball (including the .odt doc file). It is expected that a"
-  echo "                 git clone or git pull has been done into the SOURCE directory."
-  echo "                 Default is the current working directory."
-  echo "  --target-dir : the produced tarball will reside in this directory. Default is"
-  echo "                 the SOURCE directory."
-  echo "  --odt-doc    : the name of the  install guide .odt doc file. Default is"
-  echo "                 \"Ambari_Configuration_Guide\""
-  echo "  --pkg-version: the version string to be used as part of the tarball filename."
-  echo "                 Default is the most recent git version in the SOURCE dir."
-  echo
+  cat <<EOF
+
+This script creates the fedora-hadoop-install tarball package. There are no
+required parameters.
+
+SYNTAX:
+
+  --source     : the directory containing the source files used to create the
+                 tarball. It is expected that a git clone or git pull has been
+                 done into the SOURCE directory.
+                 Default is the current working directory.
+  --target-dir : the produced tarball will reside in this directory. Default is
+                 the SOURCE directory.
+  --pkg-version: the version string to be used as part of the tarball filename.
+                 Default is the most recent git version in the SOURCE dir.
+
+EOF
 }
 
 # parse_cmd: getopt used to do general parsing. See usage function for syntax.
@@ -53,13 +47,12 @@ function usage(){
 function parse_cmd(){
 
   local OPTIONS='h'
-  local LONG_OPTS='source:,target-dir:,pkg-version:,odt-doc:,help'
+  local LONG_OPTS='source:,target-dir:,pkg-version:,help'
 
   # defaults (global variables)
   SOURCE=$PWD
   TARGET=$SOURCE
   PKG_VERSION=''
-  ODT_DOC='Ambari_Configuration_Guide'
 
   local args=$(getopt -n "$(basename $0)" -o $OPTIONS --long $LONG_OPTS -- $@)
   (( $? == 0 )) || { echo "$SCRIPT syntax error"; exit -1; }
@@ -78,9 +71,6 @@ function parse_cmd(){
 	;;
 	--pkg-version)
 	   PKG_VERSION=$2; shift 2; continue
-	;;
-	--odt-doc)
-	   ODT_DOC=$2; shift 2; continue
 	;;
         --)  # no more args to parse
 	   shift; break
@@ -105,40 +95,15 @@ function parse_cmd(){
 	echo "ERROR: \"$TARGET\" target directory missing."; exit -1; }
 }
 
-# convert_odt_2_pdf: if possible convert the .odt doc file in the user's cwd
-# to a pdf file using libreoffice. Report warning if this can't be done.
-#
-function convert_odt_2_pdf(){
-
-  # user can provide docfile.odt or just docfile w/o .odt
-  ODT_DOC=${ODT_DOC%.odt} # remove .odt extension if present
-
-  local ODT_FILE="$ODT_DOC.odt"
-  local PDF_FILE="$ODT_DOC.pdf"
-  local f
-
-  echo -e "\n  - Converting \"$ODT_FILE\" to pdf..."
-
-  f=$(ls $ODT_FILE)
-  if [[ -z "$f" ]] ; then
-    echo "WARN: $ODT_FILE file does not exist, skipping this step."
-  else
-    libreoffice --headless --invisible --convert-to pdf $ODT_FILE	
-    if [[ $? != 0 || $(ls $PDF_FILE|wc -l) != 1 ]] ; then
-      echo "WARN: $ODT_FILE not converted to pdf."
-    fi
-  fi
-}
-
 # create_tarball: create a versioned directory in the user's cwd, copy the
 # target contents to that dir, create the tarball, and finally rm the
 # versioned dir.
 #
 function create_tarball(){
 
-  # tarball contains the rhs-ambari-install-<version> dir, thus we have to copy
-  # target files under this dir, create the tarball and then rm the dir
-  local TARBALL_PREFIX="rhs-ambari-install-$PKG_VERSION"
+  # tarball contains the fedora-hadoop-install-<version> dir, thus we have to
+  # copy target files under this dir, create the tarball and then rm the dir
+  local TARBALL_PREFIX="fedora-hadoop-install-$PKG_VERSION"
   local TARBALL="$TARBALL_PREFIX.tar.gz"
   local TARBALL_DIR="$TARBALL_PREFIX" # scratch dir not TARGET dir
   local TARBALL_PATH="$TARBALL_DIR/$TARBALL"
@@ -171,13 +136,11 @@ function create_tarball(){
 ##
 parse_cmd $@
 
-echo -e "This script converts the existing .odt doc file to pdf and then creates"
-echo "a tarball containing the install package."
+echo "This script creates a tarball containing the install package."
 echo
 echo "  Source dir:  $SOURCE"
 echo "  Target dir:  $TARGET"
 
-convert_odt_2_pdf
 create_tarball
 
 echo
