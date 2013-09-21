@@ -70,7 +70,8 @@ Instructions:
                                                        required)
     For example: ./install.sh /dev/sdb
 
-    Output is displayed on STDOUT and is also written to /var/log/RHS-install 
+    Output is displayed on STDOUT and is also written to:
+       /var/log/gluster-hadoop-install.log
     on both the delpoyment node and on each data node in the cluster.
 
  4) The script should complete at which ...

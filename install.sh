@@ -1,33 +1,26 @@
 #! /bin/bash
 #
-# Copyright (c) 2013 Red Hat, Inc.
 # License: Apache License v2.0
 # Author: Jeff Vance <jvance@redhat.com>
 #
 # This script (and the companion prep_node.sh script) helps to set up Gluster
-# (RHS) for Hadoop workloads. It is expected that the Red Hat Storage 
-# installation guide was followed to setup up RHS. The storage (brick) 
-# partition should be configured as RAID 6. This script does not enforce any
-# aspects of the RHS installation procedures.
+# for Hadoop workloads on Fedora. 
 #
-# A tarball named "rhs-ambari-<version>.tar.gz" is downloaded to one of the
-# cluster nodes (more common) or to the user's localhost (less common). The
-# download location is arbitrary, though installing from the same node as will
-# become the management node will reduce password-less ssh set up. Password-
-# less ssh is needed from the node hosting the rhs install tarball to all nodes
+# A tarball named "fedora-hadoop-install-<version>.tar.gz" is downloaded to one
+# of the
+# cluster nodes or to the user's localhost.  Password-less ssh is needed from
+# the node hosting the install tarball to all nodes
 # in the cluster. Password-less ssh is not necessary to and from all nodes
 # within the cluster.
 #
-# The rhs tarball contains the following:
+# The install tarball contains the following:
 #  - install.sh: this script, executed by the root user
 #  - README.txt: readme file to be read first
 #  - hosts.example: sample "hosts" config file
 #  - data/: directory containing:
 #    - prep_node.sh: companion script, not to be executed directly
-#    - gluster-hadoop-<version>.jar: Gluster-Hadoop plug-in
-#    - fuse-patch.tar.gz: FUSE patch RPMs
-#    - ambari.repo: repo file needed to install ambari
-#    - ambari-<version>.rpms.tar.gz: Ambari server and agent RPMs
+#    - gluster-hadoop-<version>.jar: Gluster-Hadoop plug-in ?? wget??
+#    - fuse-patch.tar.gz: FUSE patch RPMs ?? wget??
 #
 # install.sh is the main script and should be run as the root user. It installs
 # the files in the data/ directory to each node contained in the "hosts" file.
@@ -45,19 +38,14 @@
 #    ip-for-node-4 node-4
 #
 # IMPORTANT: the node order in the hosts file is critical. Assuming the gluster
-#   volume is created with replica 2 (which is the only config tested for RHS)
+#   volume is created with replica 2 
 #   then each pair of lines in hosts represents replica pairs. For example, the
 #   first 2 lines in hosts are replica pairs, as are the next two lines, etc.
-# IMPORTANT: unless the --mgmt-node option is specified, the first host in the
-#   hosts file is assumed to be the Ambari server node (and it is also a
-#   storage node).
 #
 # Assumptions:
 #  - passwordless SSH is setup between the installation node and each storage
 #    node **
-#  - correct version of RHS installed on each node per RHS guidelines
 #  - a data partition has been created for the storage brick
-#  - storage partition is setup as RAID 6
 #  - the order of the nodes in the "hosts" file is in replica order
 #  ** verified by this script
 #
@@ -68,8 +56,8 @@ SCRIPT=$(/bin/basename $0)
 INSTALL_VER='0.24'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
-REMOTE_INSTALL_DIR="/tmp/RHS-Ambari-install/" # on each node
-DATA_DIR='data/'     # subdir in rhs-ambari install dir
+REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
+DATA_DIR='data/'     # subdir in REMOTE_INSTALL_DIR dir
 # companion install script name
 PREP_SH="$REMOTE_INSTALL_DIR${DATA_DIR}prep_node.sh" # full path
 NUMNODES=0           # number of nodes in hosts file (= trusted pool size)
@@ -112,8 +100,7 @@ Syntax:
 $SCRIPT [-v|--version] | [-h|--help]
 
 $SCRIPT [--brick-mnt <path>] [--vol-name <name>] [--vol-mnt <path>]
-           [--replica <num>]    [--hosts <path>]    [--mgmt-node <node>]
-           [--rhn-user <name>]  [--rhn-pass <value>]
+           [--replica <num>]    [--hosts <path>]
            [--logfile <path>]   [--verbose [num] ]
            [-q|--quiet]         [--debug]           [--old-deploy]
            brick-dev
@@ -129,9 +116,9 @@ function usage(){
 
 Usage:
 
-Deploys Hadoop on top of Red Hat Storage (RHS). Each node in the storage
-cluster must be defined in the "hosts" file. The "hosts" file is not included
-in the RHS tarball but must be created prior to running this script. The file
+Deploys hadoop on top of fedora and glusterFS. Each node in the storage cluster
+must be defined in the "hosts" file. The "hosts" file is not included in the
+install tarball but must be created prior to running this script. The file
 format is:
    hostname  host-ip-address
 repeated one host per line in replica pair order. See the "hosts.example"
@@ -139,9 +126,9 @@ sample hosts file for more information.
   
 The required brick-dev argument names the brick device where the XFS file
 system will be mounted. Examples include: /dev/<VGname>/<LVname> or /dev/vdb1,
-etc. The brick-dev names a storage partition dedicated for RHS. Optional
-arguments can specify the RHS volume name and mount point, and the brick mount
-point.
+etc. The brick-dev names a storage partition dedicated for gluster. Optional
+arguments can specify the gluster volume name and mount point, and the brick
+mount point.
 EOF
   short_usage
   cat <<EOF
@@ -155,13 +142,8 @@ EOF
   --hosts     <path> : path to \"hosts\" file. This file contains a list of
                        "IP-addr hostname" pairs for each node in the cluster.
                        Default: "./hosts".
-  --mgmt-node <node> : hostname of the node to be used as the management node.
-                       Default: the first node appearing in the "hosts" file.
-  --rhn-user  <name> : Red Hat Network user name. Default is to not register
-                       the storage nodes.
-  --rhn-pass <value> : RHN password for rhn-user. Default is to not register
-                       the storage nodes.
-  --logfile   <path> : logfile name. Default is "/var/log/RHS-install.log".
+  --logfile   <path> : logfile name.
+                       Default is "/var/log/gluster-hadoop-install.log".
   --verbose   [=num] : set the verbosity level to a value of 0, 1, 2, 3. If
                        --verbose is omitted the default value is 2(summary). If
                        --verbose is supplied with no value verbosity is set to
@@ -172,8 +154,8 @@ EOF
                        Internally sets verbose=9. Note: all output is still
                        written to the logfile.
   --old-deploy       : Use if this is an existing deployment. The default
-                       is a new ("greenfield") RHS customer installation. Not
-                       currently supported.
+                       is a new ("greenfield") installation. Not currently
+                       supported.
   -v|--version       : current version string.
   -h|--help          : help text (this).
 
@@ -190,7 +172,7 @@ EOF
 function parse_cmd(){
 
   local OPTIONS='vhq'
-  local LONG_OPTS='brick-mnt:,vol-name:,vol-mnt:,replica:,hosts:,mgmt-node:,rhn-user:,rhn-pass:,logfile:,verbose::,old-deploy,help,version,quiet,debug'
+  local LONG_OPTS='brick-mnt:,vol-name:,vol-mnt:,replica:,hosts:,logfile:,verbose::,old-deploy,help,version,quiet,debug'
 
   # defaults (global variables)
   BRICK_DIR='/mnt/brick1'
@@ -200,10 +182,7 @@ function parse_cmd(){
   NEW_DEPLOY=true
   # "hosts" file concontains hostname ip-addr for all nodes in cluster
   HOSTS_FILE="$INSTALL_DIR/hosts"
-  MGMT_NODE=''
-  RHN_USER=''
-  RHN_PASS=''
-  LOGFILE='/var/log/RHS-install.log'
+  LOGFILE='/var/log/gluster-hadoop-install.log'
   VERBOSE=$LOG_SUMMARY
 
   local args=$(getopt -n "$SCRIPT" -o $OPTIONS --long $LONG_OPTS -- $@)
@@ -232,15 +211,6 @@ function parse_cmd(){
 	;;
 	--hosts)
 	    HOSTS_FILE=$2; shift 2; continue
-	;;
-	--mgmt-node)
-	    MGMT_NODE=$2; shift 2; continue
-	;;
-	--rhn-user)
-	    RHN_USER=$2; shift 2; continue
-	;;
-	--rhn-pass)
-	    RHN_PASS=$2; shift 2; continue
 	;;
 	--logfile)
 	    LOGFILE=$2; shift 2; continue
@@ -278,16 +248,6 @@ function parse_cmd(){
     exit -1
   fi
 
-  # --rhn-user and --rhn-pass, validate potentially supplied options
-  if [[ -n "$RHN_USER" ]] ; then
-    if [[ -z "$RHN_PASS" ]] ; then 
-      echo "Syntax error: rhn password required when rhn user specified"
-      /bin/sleep 1
-      short_usage
-      exit -1
-    fi
-  fi
-
   # --logfile, if relative pathname make absolute
   # note: needed if scripts change cwd
   if [[ $(dirname "$LOGFILE") == '.' ]] ; then
@@ -299,7 +259,7 @@ function parse_cmd(){
 # place. Collect all detected setup errors together (rather than one at a 
 # time) for better usability. Validate format and size of hosts file.
 # Verify connectivity between localhost and each data/storage node. Assign
-# global HOSTS and HOST_IPS array variables and the MGMT_NODE variable.
+# global HOSTS and HOST_IPS array variables.
 #
 function verify_local_deploy_setup(){
 
@@ -342,13 +302,6 @@ function verify_local_deploy_setup(){
 	# hostname:
 	((i++))
 	host=${hosts_ary[$i]}
-        # set MGMT_NODE to first node unless --mgmt-node specified
-	if [[ -z "$MGMT_NODE" && $i == 1 ]] ; then # 1st hosts file record
-	  MGMT_NODE="$host"
-          MGMT_NODE_IN_POOL=true
-	elif [[ -n "$MGMT_NODE" && "$MGMT_NODE" == "$host" ]] ; then
-          MGMT_NODE_IN_POOL=true
-        fi
 	# validate basic hostname syntax
  	if [[ ! $host =~ $VALID_HOSTNAME_RE ]] ; then
 	  errmsg+=" * $HOSTS_FILE record $((i/2)):\n   Unexpected hostname syntax for \"$host\"\n"
@@ -414,11 +367,8 @@ function report_deploy_values(){
   display "  Install-from dir:   $INSTALL_DIR"      $LOG_REPORT
   display "  Install-from IP:    $INSTALL_FROM_IP"  $LOG_REPORT
   display "  Remote install dir: $REMOTE_INSTALL_DIR"  $LOG_REPORT
-  [[ -n "$RHN_USER" ]] && \
-    display "  RHN user:           $RHN_USER"       $LOG_REPORT
   display "  \"hosts\" file:       $HOSTS_FILE"     $LOG_REPORT
   display "  Number of nodes:    $NUMNODES"         $LOG_REPORT
-  display "  Management node:    $MGMT_NODE"        $LOG_REPORT
   display "  Volume name:        $VOLNAME"          $LOG_REPORT
   display "  Volume mount:       $GLUSTER_MNT"      $LOG_REPORT
   display "  # of replicas:      $REPLICA_CNT"      $LOG_REPORT
@@ -634,8 +584,6 @@ function create_trusted_pool(){
 #    each node
 # TODO: limit disk space usage in MapReduce scratch dir so that it does not
 #       consume too much of the shared storage space.
-# NOTE: read comments below about the inablility to persist gluster volume
-#       mounts via /etc/fstab when using pre-2.1 RHS.
 #
 function setup(){
 
@@ -717,18 +665,11 @@ function setup(){
   display "       change owner and permissions..."  $LOG_INFO
   # Note: ownership and permissions must be set *afer* the gluster vol is
   #       mounted.
-   #rhs pre-2.1 does not support the entry-timeout and attribute-timeout
-   #options via shell mount command or via fstab. Thus, we run the gluserfs
-   #command to do the gluster vol mount. However this method does NOT persist
-   #the mount so whenever a data node reboots the gluster mount is lost! When
-   #we support RHS 2.1+ then the 1st mount below can be uncommented and the
-   #glusterfs mount below should be deleted.
   out=''
   for node in "${HOSTS[@]}"; do
-      #can't mount via fstab in pre-RHS 2.1 releases...
       out+=$(ssh root@$node "
-	 ##/bin/mount $GLUSTER_MNT # from fstab (UNCOMMENT this for rhs 2.1)
-	 glusterfs --attribute-timeout=0 --entry-timeout=0 --volfile-id=/$VOLNAME --volfile-server=$node $GLUSTER_MNT 2>&1 # (DELETE this for rhs 2.1)
+	 /bin/mount $GLUSTER_MNT # from fstab
+	 ##glusterfs --attribute-timeout=0 --entry-timeout=0 --volfile-id=/$VOLNAME --volfile-server=$node $GLUSTER_MNT 2>&1 # (DELETE this for rhs 2.1)
 
 	 # create mapred/system dir
 	 /bin/mkdir -p $MAPRED_SYSTEM_DIR 2>&1
@@ -763,14 +704,9 @@ function setup(){
 # A node needs to be rebooted if the FUSE patch is installed. However, the node
 # running the install script is not rebooted unless the users says yes.
 # 
-# Since the server(mgmt) node is known all other nodes are assumed to be 
-# storage(agent) nodes. However the management node can also be a storage node.
-# The right Ambari steps are performed depending on whether the target node is
-# a management node, storage node, or both. 
-#
 function install_nodes(){
 
-  local i; local node=''; local ip=''; local install_mgmt_node
+  local i; local node=''; local ip=''
   local LOCAL_PREP_LOG_DIR='/var/tmp/'; local out
   REBOOT_NODES=() # global
 
@@ -781,28 +717,25 @@ function install_nodes(){
   # needed variable is set. If an unexpected error code is returned then this
   # function exits.
   # Args: $1=hostname, $2=node's ip (can be hostname if ip is unknown),
-  #       $3=flag to install storage node, $4=flag to install the mgmt node.
+  #       $3=flag to install storage node.
   #
   function prep_node(){
 
-    local node="$1"; local ip="$2"; local install_storage="$3"
-    local install_mgmt="$4"; local err
+    local node="$1"; local ip="$2"; local err
 
     # copy the data subdir to each node...
     # use ip rather than node for scp and ssh until /etc/hosts is set up
     ssh root@$ip "
 	/bin/rm -rf $REMOTE_INSTALL_DIR
 	/bin/mkdir -p $REMOTE_INSTALL_DIR"
-    display "-- Copying RHS-Ambari install files..." $LOG_INFO
+    display "-- Copying data install files..." $LOG_INFO
     out=$(script -q -c "scp -r $DATA_DIR root@$ip:$REMOTE_INSTALL_DIR")
     display "$out" $LOG_DEBUG
 
     # prep_node.sh may apply the FUSE patch on storage node in which case the
     # node will need to be rebooted.
-    out=$(ssh root@$ip $PREP_SH $node $install_storage $install_mgmt \
-	"\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" $MGMT_NODE $VERBOSE \
-        $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR$DATA_DIR "$RHN_USER" \
-	"$RHN_PASS")
+    out=$(ssh root@$ip $PREP_SH $node "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" \
+	 $VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR$DATA_DIR)
     err=$?
     # prep_node writes all messages to the PREP_NODE_LOG logfile regardless of
     # the verbose setting. However, it outputs (and is captured above) only
@@ -842,25 +775,12 @@ function install_nodes(){
       # brick, and to name this subdir same as volname.
       bricks+=" $node:$BRICK_MNT"
 
-      install_mgmt_node=false
-      [[ -n "$MGMT_NODE_IN_POOL" && "$node" == "$MGMT_NODE" ]] && \
-	install_mgmt_node=true
-      prep_node $node $ip true $install_mgmt_node
+      prep_node $node $ip
 
       display '-------------------------------------------------' $LOG_SUMMARY
       display "-- Done installing on $node ($ip)"                 $LOG_SUMMARY
       display '-------------------------------------------------' $LOG_SUMMARY
   done
-
-  # if the mgmt node is not in the storage pool (not in hosts file) then
-  # we  need to copy the management rpm to the mgmt node and install the
-  # management server
-  if [[ -z "$MGMT_NODE_IN_POOL" ]] ; then
-    echo
-    display 'Management node is not a datanode thus mgmt code needs to be installed...' $LOG_INFO
-    display "-- Starting install of management node \"$MGMT_NODE\"" $LOG_DEBUG
-    prep_node $MGMT_NODE $MGMT_NODE false true
-  fi
 }
 
 # reboot_nodes: if one or more nodes need to be rebooted, due to installing
@@ -912,20 +832,6 @@ function perf_config(){
 	gluster volume set $VOLNAME performance.stat-prefetch off 2>&1
   ")
   display "$out" $LOG_DEBUG
-}
-
-# cleanup_logfile: the ambari-server yum install depends on Oracle JDK which
-# is large and results in *many* progress updates. When written to disk this
-# results in a *very* long record in the logfile and the user has to forward
-# through hundreds of "pages" to get to the next useful record. So, this one
-# very long record is deleted here.
-#
-function cleanup_logfile(){
-
-  # yum install string for the ambari-server progress message
-  local DELETE_STR='jdk-'
-
-  sed -i "/$DELETE_STR/d" $LOGFILE
 }
 
 # reboot_self: invoked when the install-from node (self) is also one of the
@@ -988,8 +894,6 @@ setup
 echo
 display "-- Performance config --" $LOG_SUMMARY
 perf_config
-
-cleanup_logfile
 
 # reboot nodes where the FUSE patch was installed
 reboot_nodes
