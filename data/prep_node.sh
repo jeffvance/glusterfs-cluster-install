@@ -112,22 +112,6 @@ function install_plugin(){
   display "   ... Gluster-Hadoop plug-in install successful" $LOG_SUMMARY
 }
 
-# copy_ambari_repo: copy the ambari.repo file to the correct location.
-#
-function copy_ambari_repo(){
- 
-  local REPO='ambari.repo'; local REPO_DIR='/etc/yum.repos.d'; local out
-
-  if [[ ! -f $REPO ]] ; then
-    display "ERROR: \"$REPO\" file missing" $LOG_FORCE
-    exit 15
-  fi
-  [[ -d $REPO_DIR ]] || /bin/mkdir -p $REPO_DIR
-
-  out=$(/bin/cp $REPO $REPO_DIR 2>&1)
-  display "$out" $LOG_DEBUG
-}
-
 # install_epel: install the epel rpm. Note: epel package is not part of the
 # install tarball and therefore must be installed over the internet via the
 # ambari repo file. It is required that the ambari.repo file has been copied 
@@ -270,10 +254,17 @@ function sudoers(){
   display "$out" $LOG_DEBUG
 }
 
-# install_common: perform node installation steps independent of whether or not
-# the node is to be the ambari-server or an ambari-agent.
+# install: perform all of the per-node installation steps.
 #
-function install_common(){
+function install(){
+
+  local i #; local out
+
+  # set this node's IP variable
+  for (( i=0; i<$NUMNODES; i++ )); do
+	[[ $NODE == ${HOSTS[$i]} ]] && break
+  done
+  IP=${HOST_IPS[$i]}
 
   # set up /etc/hosts to map ip -> hostname
   echo
@@ -290,29 +281,10 @@ function install_common(){
   display "-- Verifying NTP is running" $LOG_SUMMARY
   verify_ntp
 
-  # copy Ambari repo
-  echo
-  display "-- Copying Ambari repo file" $LOG_SUMMARY
-  copy_ambari_repo
-
   # install epel
   echo
   display "-- Installing EPEL package" $LOG_SUMMARY
   install_epel
-}
-
-# install_storage: perform the installation steps needed when the node is an
-#  ambari agent.
-#
-function install_storage(){
-
-  local i; local out
-
-  # set this node's IP variable
-  for (( i=0; i<$NUMNODES; i++ )); do
-	[[ $NODE == ${HOSTS[$i]} ]] && break
-  done
-  IP=${HOST_IPS[$i]}
 
   # report Gluster version 
   display "-- Gluster version: $(gluster --version | head -n 1)" $LOG_SUMMARY
@@ -320,12 +292,7 @@ function install_storage(){
   # install Gluster-Hadoop plug-in on agent nodes
   install_plugin
 
-  # install Ambari agent rpm only on agent (data/storage) nodes
-  echo
-  display "-- Installing Ambari agent" $LOG_SUMMARY
-  install_ambari_agent
-
-  # verify FUSE patch on data (agent) nodes, if not installed yum install it.
+  # verify FUSE patch, if not installed yum install it.
   echo
   display "-- Verifying FUSE patch installation:" $LOG_SUMMARY
   verify_fuse
@@ -358,7 +325,7 @@ fi
 # remove special logfile, start "clean" each time script is invoked
 rm -f $PREP_LOG
 
-install_common && install_storage
+install
 
 display "$(/bin/date). End: prep_node" $LOG_REPORT
 
