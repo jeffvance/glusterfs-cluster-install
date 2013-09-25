@@ -3,7 +3,6 @@
 # This script creates the install tarball package. Currently this includes the
 # following files:
 #  * fedora-hadoop-install-<verison> directory whicn contains:
-#  - ambari.repo
 #  - hosts.example
 #  - install.sh
 #  - prep_node.sh

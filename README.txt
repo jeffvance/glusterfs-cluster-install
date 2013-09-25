@@ -13,7 +13,6 @@
   GlusterFS does not require password-less SSH.
  
   The tarball contains the following:
-   - ambari.repo: HDP and Ambari repo yum file.
    - hosts.example: sample "hosts" config file.
    - install.sh: the main install script, executed by the root user.
    - prep_node.sh: companion script, not to be executed directly.

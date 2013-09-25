@@ -14,7 +14,6 @@
 # within the cluster.
 #
 # The install tarball contains the following:
-#  - ambari.repo: repo file for HDP and Ambari distro
 #  - hosts.example: sample "hosts" config file
 #  - install.sh: this script, executed by the root user
 #  - prep_node.sh: companion script, not to be executed directly
@@ -51,7 +50,7 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.01'   # self version
+INSTALL_VER='0.02'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
@@ -734,7 +733,7 @@ function install_nodes(){
 
     local node="$1"; local ip="$2"; local install_storage="$3"
     local install_mgmt="$4"; local err
-    local FILES_TO_COPY="ambari.repo $PREP_SH"
+    local FILES_TO_COPY="$PREP_SH"
 
     # copy the data subdir to each node...
     # use ip rather than node for scp and ssh until /etc/hosts is set up
@@ -742,22 +741,23 @@ function install_nodes(){
 	/bin/rm -rf $REMOTE_INSTALL_DIR
 	/bin/mkdir -p $REMOTE_INSTALL_DIR"
     display "-- Copying data install files..." $LOG_INFO
-    out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
-    display "$out" $LOG_DEBUG
+    #out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
+    out=$(scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR)
+    display "scp: $out" $LOG_DEBUG
 
     # prep_node.sh may apply the FUSE patch on storage node in which case the
     # node will need to be rebooted.
-    ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
+    out=$(ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
 	$install_mgmt "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" $MGMT_NODE \
-	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR
+	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR)
     err=$?
     # prep_node writes all messages to the PREP_NODE_LOG logfile regardless of
     # the verbose setting. However, it outputs (and is captured above) only
     # messages that honor the verbose setting. We can't call display() next
-    # because we don't want to double log, so instead, append the entire
+    # because we don't want to double log. So, instead, append the entire
     # PREP_NODE_LOG file to LOGFILE and echo the contents of $out.
     scp -q root@$ip:$PREP_NODE_LOG_PATH $LOCAL_PREP_LOG_DIR
-    cat ${LOCAL_PREP_LOG_DIR}$PREP_NODE_LOG >> $LOGFILE
+    cat $LOCAL_PREP_LOG_DIR$PREP_NODE_LOG >> $LOGFILE
     echo "$out" # prep_node.sh has honored the verbose setting
 
     if (( err == 99 )) ; then # this node needs to be rebooted

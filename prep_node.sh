@@ -34,7 +34,7 @@ MGMT_NODE="$6" # note: this node can be inside or outside the storage cluster
 VERBOSE=$7
 PREP_LOG=$8
 DEPLOY_DIR=${9:-/tmp/gluster-hadoop-install/data/}
-echo -e "*** $(basename $0)\n 1=$NODE, 2=$STORAGE_INSTALL, 3=$MGMT_INSTALL, 4=${HOSTS[@]}, 5=${HOST_IPS[@]}, 6=$MGMT_NODE, 7=$VERBOSE, 8=$PREP_LOG, 9=$DEPLOY_DIR"
+#echo -e "*** $(basename $0)\n 1=$NODE, 2=$STORAGE_INSTALL, 3=$MGMT_INSTALL, 4=${HOSTS[@]}, 5=${HOST_IPS[@]}, 6=$MGMT_NODE, 7=$VERBOSE, 8=$PREP_LOG, 9=$DEPLOY_DIR"
 
 NUMNODES=${#HOSTS[@]}
 # log threshold values (copied from install.sh)
@@ -46,7 +46,7 @@ LOG_QUIET=9   # value for --quiet = suppress all output
 LOG_FORCE=99  # force write regardless of VERBOSE setting
 
 # s3 variables
-RPM_URL_S3='https://s3-us-west-1.amazonaws.com/rhbd/glusterfs-ambari/'
+AMBARI_S3_RPM_URL='https://s3-us-west-1.amazonaws.com/rhbd/glusterfs-ambari/'
 
 
 # display: write all messages to the special logfile which will be copied to 
@@ -117,9 +117,8 @@ function install_plugin(){
 	$LOG_FORCE
     exit 5
   fi
-exit 111
 
-  display "-- Installing gluster-hadoop plug-in from $jar_ver..." $LOG_INFO
+  display "-- Installing gluster-hadoop plug-in from $jar..." $LOG_INFO
   # create target dirs if they does not exist
   [[ -d $USR_JAVA_DIR ]]    || /bin/mkdir -p $USR_JAVA_DIR
   [[ -d $HADOOP_JAVA_DIR ]] || /bin/mkdir -p $HADOOP_JAVA_DIR
@@ -139,17 +138,29 @@ exit 111
   display "   ... Gluster-Hadoop plug-in install successful" $LOG_SUMMARY
 }
 
-# copy_ambari_repo: copy the ambari.repo file to the correct location.
+# get_ambari_repo: wget the ambari.repo file.
 #
-function copy_ambari_repo(){
+function get_ambari_repo(){
 
   local REPO='ambari.repo'; local REPO_DIR='/etc/yum.repos.d'
-  local out
+  local REPO_PATH="$REPO_DIR/$REPO"
+  local REPO_URL="http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.2.3.7/$REPO"
+  local out; local err
 
-  [[ -f $REPO ]] || { display "ERROR: \"$REPO\" file missing"; exit 15;}
   [[ -d $REPO_DIR ]] || /bin/mkdir -p $REPO_DIR
-  out=$(/bin/cp $REPO $REPO_DIR 2>&1)
-  display "$REPO cp: $out" $LOG_DEBUG
+
+  out=$(wget $REPO_URL -O $REPO_PATH)
+  err=$?
+  display "$REPO wget: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: wget $REPO error $err" $LOG_FORCE
+    exit 14
+  fi
+
+  if [[ ! -f $REPO_PATH ]] ; then
+    display "ERROR: $REPO_PATH missing" $LOG_FORCE
+    exit 15
+  fi 
 }
 
 # install_epel: install the epel rpm. Note: epel package is not part of the
@@ -169,13 +180,13 @@ function install_epel(){
 # .ini file to point to the ambari server, start the agent, and set up agent to
 # start automatically after a reboot.
 # Note: in a future version we may want to do 1 wget from s3 to the install-from
-#   host, and the scp the rpm to each agent node in parallel...
+#   host, and then scp the rpm to each agent node in parallel...
 #
 function install_ambari_agent(){
 
-  local out
+  local out; local err
   local RPM_FILE='ambari-agent-1.3.0-SNAPSHOT20130904172112.x86_64.rpm'
-  local RPM_URL="$RPM_URL_S3$RPM_FILE"
+  local RPM_URL="$AMBARI_S3_RPM_URL$RPM_FILE"
   local ambari_ini='/etc/ambari-agent/conf/ambari-agent.ini'
   local SERVER_SECTION='server'; SERVER_KEY='hostname='
   local KEY_VALUE="$MGMT_NODE"
@@ -185,17 +196,22 @@ function install_ambari_agent(){
   if [[ -f $AMBARI_AGENT_PID ]] ; then
     display "   stopping ambari-agent" $LOG_INFO
     out=$(ambari-agent stop 2>&1)
-    display "$out" $LOG_DEBUG
+    display "stop: $out" $LOG_DEBUG
   fi
 
   # get agent rpm
   out=$(wget $RPM_URL 2>&1)
+  err=$?
   display "agent rpm wget: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "  wget error: $err" $LOG_FORCE
+    exit 20
+  fi
 
   # install agent rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari agent RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 20
+    exit 25
   fi
   out=$(yum -y install $RPM_FILE 2>&1)
   display "agent install: $out" $LOG_DEBUG
@@ -218,9 +234,9 @@ function install_ambari_agent(){
 #
 function install_ambari_server(){
 
-  local out
+  local out; local err
   local RPM_FILE='ambari-server-1.3.0-SNAPSHOT20130904172038.noarch.rpm'
-  local RPM_URL="$RPM_URL_S3$RPM_FILE"
+  local RPM_URL="$AMBARI_S3_RPM_URL$RPM_FILE"
   local AMBARI_SERVER_PID='/var/run/ambari-server/ambari-server.pid'
 
   # stop and reset server if running
@@ -234,12 +250,17 @@ function install_ambari_server(){
 
   # get server rpm
   out=$(wget $RPM_URL 2>&1)
+  err=$?
   display "server rpm wget: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "  wget error: $err" $LOG_FORCE
+    exit 30
+  fi
 
   # install server rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari server RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 30
+    exit 35
   fi
   # Note: the Oracle Java install takes a fair amount of time and yum does
   # thousands of progress updates. On a terminal this is fine but when output
@@ -342,32 +363,30 @@ function verify_fuse(){
   local FEDORA_FUSE='fedora-fuse'
   local out
 
-  if [[ -f "$FUSE_REPO" ]]; then # file exists, assume installed
-    display "   ... verified" $LOG_DEBUG
-    return
-  fi
+  # if the fuse repo file exists and contains the "fedora-fuse" then assume
+  # that the fuse patch has already been installed
+  [[ -f "$FUSE_REPO" && -n "$(/bin/grep -s '$FEDORA_FUSE' $FUSE_REPO)" ]] && {
+    display "   ... verified" $LOG_DEBUG;
+    return;
+  }
 
-  display "-- Installing FUSE patch which may take more than a few seconds..." $LOG_INFO
+  display "-- Installing FUSE patch..." $LOG_INFO
   echo
+  [[ -f "$FUSE_REPO" ]] || display "   Creating \"$FUSE_REPO\" file" $LOG_DEBUG
 
-  # if the fuse repo file is absent or does not contain the "fedora-fuse"
-  # string  # then install the fuse patch
-  if [[ ! -f $FUSE_REPO || -n "$(/bin/grep -qs '$FEDORA_FUSE')" ]] ; then
-    display "   Creating \"$FUSE_REPO\" file" $LOG_DEBUG
-    cat <<EOF >>$FUSE_REPO
+  cat <<EOF >>$FUSE_REPO
 [$FEDORA_FUSE]
 name=$FEDORA_FUSE
 baseurl=$REPO_URL
 EOF
  
-    out=$(yum -y install perl)  # perl is a dependency
-    display "$out" $LOG_DEBUG
-    out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck -y  \
+  out=$(yum -y install perl)  # perl is a dependency
+  display "install perl: $out" $LOG_DEBUG
+  out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck -y  \
 	install p* k*)
-    display "$out" $LOG_DEBUG
-    echo
-    REBOOT_REQUIRED=true
-  fi
+  display "install fuse: $out" $LOG_DEBUG
+  echo
+  REBOOT_REQUIRED=true
 }
 
 # sudoers: create the /etc/sudoers.d/20_gluster file if not present, add the
@@ -471,10 +490,10 @@ function install_common(){
   display "-- Verifying NTP is running" $LOG_SUMMARY
   verify_install_ntp
 
-  # copy Ambari repo
+  # get Ambari repo file
   echo
-  display "-- Copying Ambari repo file"
-  copy_ambari_repo
+  display "-- Downloading the Ambari repo file"
+  get_ambari_repo
 
   # install epel
   echo
