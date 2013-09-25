@@ -14,13 +14,11 @@
 # within the cluster.
 #
 # The install tarball contains the following:
-#  - install.sh: this script, executed by the root user
-#  - README.txt: readme file to be read first
+#  - ambari.repo: repo file for HDP and Ambari distro
 #  - hosts.example: sample "hosts" config file
-#  - data/: directory containing:
-#    - prep_node.sh: companion script, not to be executed directly
-#    - gluster-hadoop-<version>.jar: Gluster-Hadoop plug-in ?? wget??
-#    - fuse-patch.tar.gz: FUSE patch RPMs ?? wget??
+#  - install.sh: this script, executed by the root user
+#  - prep_node.sh: companion script, not to be executed directly
+#  - README.txt: readme file to be read first
 #
 # install.sh is the main script and should be run as the root user. It installs
 # the files in the data/ directory to each node contained in the "hosts" file.
@@ -57,9 +55,8 @@ INSTALL_VER='0.01'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
-DATA_DIR='data/'     # subdir in REMOTE_INSTALL_DIR dir
 # companion install script name
-PREP_SH="$REMOTE_INSTALL_DIR${DATA_DIR}prep_node.sh" # full path
+PREP_SH='prep_node.sh'
 NUMNODES=0           # number of nodes in hosts file (= trusted pool size)
 bricks=''            # string list of node:/brick-mnts for volume create
 # local logfile on each host, copied from remote host to install-from host
@@ -100,7 +97,7 @@ Syntax:
 $SCRIPT [-v|--version] | [-h|--help]
 
 $SCRIPT [--brick-mnt <path>] [--vol-name <name>] [--vol-mnt <path>]
-           [--replica <num>]    [--hosts <path>]
+           [--replica <num>]    [--hosts <path>] [--mgmt-node <node>]
            [--logfile <path>]   [--verbose [num] ]
            [-q|--quiet]         [--debug]           [--old-deploy]
            brick-dev
@@ -142,6 +139,8 @@ EOF
   --hosts     <path> : path to \"hosts\" file. This file contains a list of
                        "IP-addr hostname" pairs for each node in the cluster.
                        Default: "./hosts".
+  --mgmt-node <node> : hostname of the node to be used as the management node.
+                       Default: the first node appearing in the "hosts" file.
   --logfile   <path> : logfile name.
                        Default is "/var/log/gluster-hadoop-install.log".
   --verbose   [=num] : set the verbosity level to a value of 0, 1, 2, 3. If
@@ -172,7 +171,7 @@ EOF
 function parse_cmd(){
 
   local OPTIONS='vhq'
-  local LONG_OPTS='brick-mnt:,vol-name:,vol-mnt:,replica:,hosts:,logfile:,verbose::,old-deploy,help,version,quiet,debug'
+  local LONG_OPTS='brick-mnt:,vol-name:,vol-mnt:,replica:,hosts:,mgmt-node,logfile:,verbose::,old-deploy,help,version,quiet,debug'
 
   # defaults (global variables)
   BRICK_DIR='/mnt/brick1'
@@ -180,9 +179,10 @@ function parse_cmd(){
   GLUSTER_MNT='/mnt/glusterfs'
   REPLICA_CNT=2
   NEW_DEPLOY=true
-  # "hosts" file concontains hostname ip-addr for all nodes in cluster
+  # "hosts" file contains hostname ip-addr for all nodes in cluster
   HOSTS_FILE="$INSTALL_DIR/hosts"
-  LOGFILE='/var/log/gluster-hadoop-install.log'
+  MGMT_NODE=''
+  LOGFILE='/var/log/fedora-hadoop-install.log'
   VERBOSE=$LOG_SUMMARY
 
   local args=$(getopt -n "$SCRIPT" -o $OPTIONS --long $LONG_OPTS -- $@)
@@ -212,6 +212,9 @@ function parse_cmd(){
 	--hosts)
 	    HOSTS_FILE=$2; shift 2; continue
 	;;
+        --mgmt-node)
+            MGMT_NODE=$2; shift 2; continue
+        ;;
 	--logfile)
 	    LOGFILE=$2; shift 2; continue
 	;;
@@ -259,7 +262,7 @@ function parse_cmd(){
 # place. Collect all detected setup errors together (rather than one at a 
 # time) for better usability. Validate format and size of hosts file.
 # Verify connectivity between localhost and each data/storage node. Assign
-# global HOSTS and HOST_IPS array variables.
+# global HOSTS, HOST_IPS, and MGMT_NODE variables.
 #
 function verify_local_deploy_setup(){
 
@@ -302,6 +305,15 @@ function verify_local_deploy_setup(){
 	# hostname:
 	((i++))
 	host=${hosts_ary[$i]}
+
+        # set MGMT_NODE to first node unless --mgmt-node specified
+        if [[ -z "$MGMT_NODE" && $i == 1 ]] ; then # 1st hosts file record
+          MGMT_NODE="$host"
+          MGMT_NODE_IN_POOL=true
+        elif [[ -n "$MGMT_NODE" && "$MGMT_NODE" == "$host" ]] ; then
+          MGMT_NODE_IN_POOL=true
+        fi
+
 	# validate basic hostname syntax
  	if [[ ! $host =~ $VALID_HOSTNAME_RE ]] ; then
 	  errmsg+=" * $HOSTS_FILE record $((i/2)):\n   Unexpected hostname syntax for \"$host\"\n"
@@ -341,8 +353,8 @@ function verify_local_deploy_setup(){
     # read and verify/validate hosts file format
     read_verify_local_hosts_file
   fi
-  if [[ ! -d $INSTALL_DIR/data ]] ; then
-    errmsg+=" * \"$INSTALL_DIR/data\" sub-directory is missing.\n"
+  if [[ ! -d $INSTALL_DIR ]] ; then
+    errmsg+=" * \"$INSTALL_DIR\" directory is missing.\n"
     ((errcnt++))
   fi
 
@@ -369,6 +381,7 @@ function report_deploy_values(){
   display "  Remote install dir: $REMOTE_INSTALL_DIR"  $LOG_REPORT
   display "  \"hosts\" file:       $HOSTS_FILE"     $LOG_REPORT
   display "  Number of nodes:    $NUMNODES"         $LOG_REPORT
+  display "  Management node:    $MGMT_NODE"        $LOG_REPORT
   display "  Volume name:        $VOLNAME"          $LOG_REPORT
   display "  Volume mount:       $GLUSTER_MNT"      $LOG_REPORT
   display "  # of replicas:      $REPLICA_CNT"      $LOG_REPORT
@@ -588,7 +601,7 @@ function create_trusted_pool(){
 function setup(){
 
   local i=0; local node=''; local ip=''; local out
-  local PERMISSIONS='777' # for now until we learn how to reduce this...
+  local PERMISSIONS='1777' # group sticky bit set
   local OWNER='mapred'; local GROUP='hadoop'
   local BRICK_MNT_OPTS="noatime,inode64"
   local GLUSTER_MNT_OPTS="entry-timeout=0,attribute-timeout=0,_netdev"
@@ -684,9 +697,7 @@ function setup(){
        	 fi
 
 	 /bin/chown -R $OWNER:$GROUP $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1
-	 /bin/chmod $PERMISSIONS $GLUSTER_MNT $MAPRED_SCRATCH_DIR \
-		    $MAPRED_SYSTEM_DIR 2>&1
-	 /bin/chmod g+s $GLUSTER_MNT 2>&1 # set s-bit so subdirs inherit group
+	 /bin/chmod -R $PERMISSIONS  $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1
       ")
       out+="\n"
   done
@@ -717,11 +728,13 @@ function install_nodes(){
   # needed variable is set. If an unexpected error code is returned then this
   # function exits.
   # Args: $1=hostname, $2=node's ip (can be hostname if ip is unknown),
-  #       $3=flag to install storage node.
+  #       $3=flag to install storage node, $4=flag to install the mgmt node.
   #
   function prep_node(){
 
-    local node="$1"; local ip="$2"; local err
+    local node="$1"; local ip="$2"; local install_storage="$3"
+    local install_mgmt="$4"; local err
+    local FILES_TO_COPY="ambari.repo $PREP_SH"
 
     # copy the data subdir to each node...
     # use ip rather than node for scp and ssh until /etc/hosts is set up
@@ -729,13 +742,14 @@ function install_nodes(){
 	/bin/rm -rf $REMOTE_INSTALL_DIR
 	/bin/mkdir -p $REMOTE_INSTALL_DIR"
     display "-- Copying data install files..." $LOG_INFO
-    out=$(script -q -c "scp -r $DATA_DIR root@$ip:$REMOTE_INSTALL_DIR")
+    out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
     display "$out" $LOG_DEBUG
 
     # prep_node.sh may apply the FUSE patch on storage node in which case the
     # node will need to be rebooted.
-    out=$(ssh root@$ip $PREP_SH $node "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" \
-	 $VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR$DATA_DIR)
+    ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
+	$install_mgmt "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" $MGMT_NODE \
+	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR
     err=$?
     # prep_node writes all messages to the PREP_NODE_LOG logfile regardless of
     # the verbose setting. However, it outputs (and is captured above) only
@@ -775,12 +789,25 @@ function install_nodes(){
       # brick, and to name this subdir same as volname.
       bricks+=" $node:$BRICK_MNT"
 
-      prep_node $node $ip
+      install_mgmt_node=false
+      [[ -n "$MGMT_NODE_IN_POOL" && "$node" == "$MGMT_NODE" ]] && \
+        install_mgmt_node=true
+      prep_node $node $ip true $install_mgmt_node
 
       display '-------------------------------------------------' $LOG_SUMMARY
       display "-- Done installing on $node ($ip)"                 $LOG_SUMMARY
       display '-------------------------------------------------' $LOG_SUMMARY
   done
+
+  # if the mgmt node is not in the storage pool (not in hosts file) then
+  # we  need to copy the management rpm to the mgmt node and install the
+  # management server
+  if [[ -z "$MGMT_NODE_IN_POOL" ]] ; then
+    echo
+    display 'Management node is not a datanode thus mgmt code needs to be installed...' $LOG_INFO
+    display "-- Starting install of management node \"$MGMT_NODE\"" $LOG_DEBUG
+    prep_node $MGMT_NODE $MGMT_NODE false true
+  fi
 }
 
 # reboot_nodes: if one or more nodes need to be rebooted, due to installing

@@ -3,13 +3,11 @@
 # This script creates the install tarball package. Currently this includes the
 # following files:
 #  * fedora-hadoop-install-<verison> directory whicn contains:
-#  - install.sh
-#  - README.txt
+#  - ambari.repo
 #  - hosts.example
-#  - data/: directory containing:
-#    - prep_node.sh
-#    - gluster-hadoop-<version>.jar ?? or wget
-#    - fuse-patch.tar.gz ?? or wget
+#  - install.sh
+#  - prep_node.sh
+#  - README.txt
 #
 # This script is expected to be run from a git repo so that source version
 # info can be used in the tarball filename. The --source and --target-dir
@@ -107,7 +105,7 @@ function create_tarball(){
   local TARBALL="$TARBALL_PREFIX.tar.gz"
   local TARBALL_DIR="$TARBALL_PREFIX" # scratch dir not TARGET dir
   local TARBALL_PATH="$TARBALL_DIR/$TARBALL"
-  local FILES_TO_TAR=(install.sh README.txt hosts.example data/)
+  local FILES_TO_TAR=(ambari.repo install.sh prep_node.sh README.txt hosts.example)
   local f
 
   echo -e "\n  - Creating $TARBALL tarball in $TARGET"

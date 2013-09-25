@@ -2,7 +2,7 @@
 
 == Overview ==
 
-  The install.sh script (and the companion data/prep_node.sh script) sets up
+  The install.sh script (and the companion prep_node.sh script) sets up
   GlusterFS on Fedora for Hadoop workloads.  The storage (brick) partition
   (usually /dev/sdb) can be configured as RAID 6 or as JBODs.
  
@@ -13,16 +13,15 @@
   GlusterFS does not require password-less SSH.
  
   The tarball contains the following:
-   - install.sh: the main install script, executed by the root user.
-   - README.txt: this file.
+   - ambari.repo: HDP and Ambari repo yum file.
    - hosts.example: sample "hosts" config file.
-   - data/: directory containing:
-     - prep_node.sh: companion script, not to be executed directly.
-     - gluster-hadoop-<version>.jar: Gluster-Hadoop plug-in. ?? or wget??
-     - fuse-patch.tar.gz: FUSE patch RPMs.?? or wget from s3?
+   - install.sh: the main install script, executed by the root user.
+   - prep_node.sh: companion script, not to be executed directly.
+   - README.txt: this file.
  
-  install.sh is the main script and should be run as the root user. It installs
-  the files in the data/ directory to each node contained in the "hosts" file.
+  install.sh is the main script and should be run as the root user. It copies
+  prep_node.sh and other files to each node contained in the "hosts" file, and
+  ensures that each node is setup to be a data (tasktracker) node.
  
 == Before you begin ==
 
@@ -38,11 +37,10 @@
      ip-for-node-2 hostname-for-node-2
      ip-for-node-4 hostname-for-node-4
  
-  IMPORTANT: the node order in the hosts file is critical for two reasons:
-  1) Assuming the Gluster volume is created with replica 2
-     then each pair of lines in hosts
-     represents replica pairs. For example, the first 2 lines in hosts are
-     replica pairs, as are the next two lines, etc.
+  IMPORTANT: the node order in the hosts file is important. Assuming the Gluster
+  volume is created with replica 2 then each pair of lines in hosts represents
+  replica pairs. For example, the first 2 lines in hosts are replica pairs, as
+  are the next two lines, etc.
 
   Also:
   - passwordless SSH is required between the installation node and each storage
