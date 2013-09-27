@@ -154,12 +154,12 @@ function get_ambari_repo(){
   display "$REPO wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: wget $REPO error $err" $LOG_FORCE
-    exit 14
+    exit 15
   fi
 
   if [[ ! -f $REPO_PATH ]] ; then
     display "ERROR: $REPO_PATH missing" $LOG_FORCE
-    exit 15
+    exit 20
   fi 
 }
 
@@ -200,21 +200,26 @@ function install_ambari_agent(){
   fi
 
   # get agent rpm
-  out=$(wget $RPM_URL 2>&1)
+  out=$(wget -nv $RPM_URL 2>&1)
   err=$?
-  display "agent rpm wget: $out" $LOG_DEBUG
+  display "ambari agent rpm wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
-    display "  wget error: $err" $LOG_FORCE
-    exit 20
+    display "ERROR: wget agent error $err" $LOG_FORCE
+    exit 25
   fi
 
   # install agent rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari agent RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 25
+    exit 30
   fi
   out=$(yum -y install $RPM_FILE 2>&1)
+  err=$?
   display "agent install: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: agent install error $err" $LOG_FORCE
+    exit 35
+  fi
 
   # modify the agent's .ini file's server hostname value
   display "  modifying $ambari_ini file" $LOG_DEBUG
@@ -249,18 +254,18 @@ function install_ambari_server(){
   fi
 
   # get server rpm
-  out=$(wget $RPM_URL 2>&1)
+  out=$(wget -nv $RPM_URL 2>&1)
   err=$?
-  display "server rpm wget: $out" $LOG_DEBUG
+  display "ambari server rpm wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
-    display "  wget error: $err" $LOG_FORCE
-    exit 30
+    display "ERROR: wget server error $err" $LOG_FORCE
+    exit 40
   fi
 
   # install server rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari server RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 35
+    exit 45
   fi
   # Note: the Oracle Java install takes a fair amount of time and yum does
   # thousands of progress updates. On a terminal this is fine but when output
@@ -272,7 +277,12 @@ function install_ambari_server(){
   # setup the ambari-server
   # note: -s accepts all defaults with no prompting
   out=$(ambari-server setup -s 2>&1)
+  err=$?
   display "server setup: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: server install error $err" $LOG_FORCE
+    exit 50
+  fi
 
   # start the server
   out=$(ambari-server start 2>&1)
@@ -361,7 +371,7 @@ function verify_fuse(){
   local FUSE_REPO='/etc/yum.repos.d/fedora-fuse.repo'
   local REPO_URL='http://fedora-fuse.s3.amazonaws.com/'
   local FEDORA_FUSE='fedora-fuse'
-  local out
+  local out; local err
 
   # if the fuse repo file exists and contains the "fedora-fuse" then assume
   # that the fuse patch has already been installed
@@ -381,10 +391,20 @@ baseurl=$REPO_URL
 EOF
  
   out=$(yum -y install perl)  # perl is a dependency
+  err=$?
   display "install perl: $out" $LOG_DEBUG
   out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck -y  \
+  if (( err != 0 )) ; then
+    display "ERROR: install perl error $err" $LOG_FORCE
+    exit 55
+  fi
 	install p* k*)
+  err=$?
   display "install fuse: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: install FUSE error $err" $LOG_FORCE
+    exit 65
+  fi
   echo
   REBOOT_REQUIRED=true
 }
@@ -451,14 +471,14 @@ function disable_firewall(){
 
   local out
 
-  out=$(service iptables stop)  # redundant with below?
-  display "iptables stop: $out" $LOG_DEBUG
+  #out=$(systemctl stop firewalld.service) # redundant with below?
+  #display "systemctl stop: $out" $LOG_DEBUG
+  #out=$(service iptables stop)  # redundant with above?
+  out=$(iptables -F) # sure fire way to disable iptables
+  display "iptables: $out" $LOG_DEBUG
 
   out=$(chkconfig iptables off) # preserve after reboot
   display "chkconfig off: $out" $LOG_DEBUG
-  
-  out=$(systemctl stop firewalld.service) # redundant with above?
-  display "systemctl stop: $out" $LOG_DEBUG
 }
 
 # install_common: perform node installation steps independent of whether or not

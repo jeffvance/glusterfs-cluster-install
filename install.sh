@@ -741,24 +741,22 @@ function install_nodes(){
 	/bin/rm -rf $REMOTE_INSTALL_DIR
 	/bin/mkdir -p $REMOTE_INSTALL_DIR"
     display "-- Copying data install files..." $LOG_INFO
-    #out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
-    out=$(scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR)
+    out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
+    #out=$(scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR)
     display "scp: $out" $LOG_DEBUG
 
     # prep_node.sh may apply the FUSE patch on storage node in which case the
     # node will need to be rebooted.
-    out=$(ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
+    ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
 	$install_mgmt "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" $MGMT_NODE \
-	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR)
+	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR
     err=$?
-    # prep_node writes all messages to the PREP_NODE_LOG logfile regardless of
-    # the verbose setting. However, it outputs (and is captured above) only
-    # messages that honor the verbose setting. We can't call display() next
-    # because we don't want to double log. So, instead, append the entire
-    # PREP_NODE_LOG file to LOGFILE and echo the contents of $out.
+    # prep_node.sh writes all messages to the PREP_NODE_LOG logfile regardless
+    # of the verbose setting. However, prep_node.sh outputs only messages that 
+    # honor the verbose setting. Append the entire PREP_NODE_LOG file to
+    # LOGFILE. The output of prep_node.sh has already been written to stdout.
     scp -q root@$ip:$PREP_NODE_LOG_PATH $LOCAL_PREP_LOG_DIR
     cat $LOCAL_PREP_LOG_DIR$PREP_NODE_LOG >> $LOGFILE
-    echo "$out" # prep_node.sh has honored the verbose setting
 
     if (( err == 99 )) ; then # this node needs to be rebooted
       # don't reboot if node is the install-from node!

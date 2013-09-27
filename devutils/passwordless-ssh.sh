@@ -34,12 +34,16 @@ function bugout (){ # $1 is the message
 #
 function short_usage(){
 
-  echo -e "Syntax:\n"
-  echo "$SCRIPT [-v|--version] | [-h|--help]"
-  echo "$SCRIPT [--hosts <path>]"
-  echo "        [--sethostname | [--noset|--nosethostname]"
-  echo "        [--verbose]"
-  echo
+  cat <<EOF
+
+Syntax:
+
+$SCRIPT [-v|--version] | [-h|--help]
+$SCRIPT [--hosts <path>]
+        [--sethostname | [--noset|--nosethostname]
+        [--verbose]
+
+EOF
 }
 
 # usage: write full usage/help text to stdout.
@@ -63,9 +67,9 @@ other hosts defined in the file.
 "host" file format:
    IP-address   simple-hostname
    IP-address   simple-hostname ...
-
-Syntax:
-
+EOF
+  short_usage
+  cat <<EOF
   --hosts     <path> : path to "hosts" file. This file contains a list of
                        "IP-addr hostname" pairs for each node in the cluster.
                        Default: "./hosts"
@@ -179,7 +183,9 @@ function read_verify_local_hosts_file(){
 	# note: ip used since /etc/hosts may not be set up to map ip to hostname
         bugout "--->checking to see if we already have password-less SSH"
 	ssh -q -oBatchMode=yes root@$ip exit
-        if (( $? != 0 )) ; then
+        if (( $? == 0 )) ; then
+           bugout "yes...password-less SSH to $ip"
+ 	else
            bugout "nope...no password-less SSH to $ip"
 	fi
     done
@@ -213,7 +219,7 @@ function fixup_etc_hosts_file(){
           continue # skip to next node
         fi
 	bugout "---> $host appended to /etc/hosts"
-        hosts_buf+="$ip $host$'\n' # \n at end
+        hosts_buf+="$ip $host"$'\n' # \n at end
   done
   if (( ${#hosts_buf} > 2 )) ; then
     hosts_buf=${hosts_buf:0:${#hosts_buf}-1} # remove \n for last host entry
@@ -232,8 +238,8 @@ function setup_passwordless_ssh {
      ssh-keygen -q -t rsa -f $PRIVATE_KEY_FILE -N ""
    fi
 
-   # add hosts "hosts" file to local /etc/hosts if not already there
-   display "Potentially update /etc/hosts with hostnames..."
+   # add hosts file's "hosts" to local /etc/hosts if not already there
+   display "Potentially update /etc/hosts with hostnames from \"hosts\" file..."
    fixup_etc_hosts_file
 
    display "Copying keys to each node..."
@@ -243,8 +249,10 @@ function setup_passwordless_ssh {
 	bugout "--> $host ($ip)"
 
 	# remove host from known_hosts file, if present
-	bugout "delete \"$host\" from known_hosts file"
-	[[ -f $KNOWN_HOSTS ]] && sed -i "/^$host/d" $KNOWN_HOSTS
+	if [[ -f $KNOWN_HOSTS ]] ; then
+	  bugout "delete \"$host\" and \"$ip\" from known_hosts file"
+	  sed -i "/^$host/d;/^$ip/d" $KNOWN_HOSTS
+	fi
 
 	display "Copying SSH keyfile to $host"
 	bugout "---> with 'sh-copy-id -i ~/.ssh/id_rsa.pub root@$host' command"
@@ -256,6 +264,7 @@ function setup_passwordless_ssh {
 	ssh -q -oBatchMode=yes root@$host exit
 	if (( $? != 0 )) ; then
           sshOK='FAILED'
+          display "ERROR: Can't ssh to $host"
           display "PASSWORDLESS SSH SETUP FAILED - FATAL!"
           exit 20
 	fi
