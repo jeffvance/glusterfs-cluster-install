@@ -393,12 +393,12 @@ EOF
   out=$(yum -y install perl)  # perl is a dependency
   err=$?
   display "install perl: $out" $LOG_DEBUG
-  out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck -y  \
+  out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck \
+	-y  install p* k*)
   if (( err != 0 )) ; then
     display "ERROR: install perl error $err" $LOG_FORCE
     exit 55
   fi
-	install p* k*)
   err=$?
   display "install fuse: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
