@@ -115,7 +115,7 @@ function install_plugin(){
     display "ERROR: gluster-hadoop plug-in missing in $DEPLOY_DIR" $LOG_FORCE
     display "       attemped to retrieve JAR from $INDEX_URL/$jar_ver/" \
 	$LOG_FORCE
-    exit 5
+    exit 3
   fi
 
   display "-- Installing gluster-hadoop plug-in from $jar..." $LOG_INFO
@@ -127,7 +127,7 @@ function install_plugin(){
   out=$(/bin/cp -uf $jar $USR_JAVA_DIR 2>&1)
   if (( $? != 0 )) ; then
     display "  Copy of plug-in failed" $LOG_FORCE
-    exit 10
+    exit 5
   fi
   display "cp: $out" $LOG_DEBUG
 
@@ -154,12 +154,12 @@ function get_ambari_repo(){
   display "$REPO wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: wget $REPO error $err" $LOG_FORCE
-    exit 15
+    exit 8
   fi
 
   if [[ ! -f $REPO_PATH ]] ; then
     display "ERROR: $REPO_PATH missing" $LOG_FORCE
-    exit 20
+    exit 10
   fi 
 }
 
@@ -167,13 +167,19 @@ function get_ambari_repo(){
 # install tarball and therefore must be installed over the internet via the
 # ambari repo file. It is required that the ambari.repo file has been copied 
 # to the correct dir prior to invoking this function.
+# NOTE: not currently used.
 #
 function install_epel(){
 
-  local out
+  local out; local err
  
   out=$(yum -y install epel-release 2>&1)
-  display "$out" $LOG_DEBUG
+  err=$?
+  display "epel install: $out" $LOG_DEBUG
+  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+    display "ERROR: epel install error $err" $LOG_FORCE
+    exit 12
+  fi
 }
 
 # install_ambari_agent: retrieve and install the ambari agent rpm, modify the
@@ -205,20 +211,20 @@ function install_ambari_agent(){
   display "ambari agent rpm wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: wget agent error $err" $LOG_FORCE
-    exit 25
+    exit 14
   fi
 
   # install agent rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari agent RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 30
+    exit 16
   fi
   out=$(yum -y install $RPM_FILE 2>&1)
   err=$?
   display "agent install: $out" $LOG_DEBUG
-  if (( err != 0 )) ; then
+  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
     display "ERROR: agent install error $err" $LOG_FORCE
-    exit 35
+    ##exit 18 # uncomment this after ambari rpm works!
   fi
 
   # modify the agent's .ini file's server hostname value
@@ -259,20 +265,25 @@ function install_ambari_server(){
   display "ambari server rpm wget: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: wget server error $err" $LOG_FORCE
-    exit 40
+    exit 20
   fi
 
   # install server rpm
   if [[ ! -f "$RPM_FILE" ]] ; then
     display "ERROR: Ambari server RPM \"$RPM_FILE\" missing" $LOG_FORCE
-    exit 45
+    exit 22
   fi
   # Note: the Oracle Java install takes a fair amount of time and yum does
   # thousands of progress updates. On a terminal this is fine but when output
   # is redirected to disk you get a *very* long record. The invoking script will
   # delete this one very long record in order to make the logfile more usable.
   out=$(yum -y install $server_rpm 2>&1)
+  err=$?
   display "server install: $out" $LOG_DEBUG
+  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+    display "ERROR: server install error $err" $LOG_FORCE
+    exit 24
+  fi
 
   # setup the ambari-server
   # note: -s accepts all defaults with no prompting
@@ -281,7 +292,7 @@ function install_ambari_server(){
   display "server setup: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: server install error $err" $LOG_FORCE
-    exit 50
+    exit 26
   fi
 
   # start the server
@@ -393,17 +404,18 @@ EOF
   out=$(yum -y install perl)  # perl is a dependency
   err=$?
   display "install perl: $out" $LOG_DEBUG
+  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+    display "ERROR: perl install error $err" $LOG_FORCE
+    exit 28
+  fi
+
   out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck \
 	-y  install p* k*)
-  if (( err != 0 )) ; then
-    display "ERROR: install perl error $err" $LOG_FORCE
-    exit 55
-  fi
   err=$?
   display "install fuse: $out" $LOG_DEBUG
-  if (( err != 0 )) ; then
+  if (( err != 0 && err != 1 )) ; then 1--> nothing-to-do
     display "ERROR: install FUSE error $err" $LOG_FORCE
-    exit 65
+    exit 30
   fi
   echo
   REBOOT_REQUIRED=true
@@ -448,17 +460,28 @@ function sudoers(){
 #
 function install_gluster(){
 
-  local out
+  local out; local err
 
   # install gluster
   out=$(yum -y install glusterfs glusterfs-server glusterfs-fuse 2>&1)
+  err=$?
   display "gluster install: $out" $LOG_DEBUG
+  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+    display "ERROR: gluster install error $err" $LOG_FORCE
+    exit 32
+  fi
 
   # start gluster
-  out=$(service glusterd start >& /dev/null)  # reports error on fedora19
+  #out=$(service glusterd start >& /dev/null)  # reports error on fedora19
+  out=$(systemctl start glusterd.service)
+  err=$?
   display "gluster start: $out" $LOG_INFO
-  # f19 work-around
-  /usr/sbin/glusterd  #????? not there!!
+  if (( err != 0 )) ; then
+    display "ERROR: gluster start error $err" $LOG_FORCE
+    exit 34
+  fi
+  # f19 work-around ??
+  #/usr/sbin/glusterd  #????? not there!!
 
   display "   Gluster version: $(gluster --version | head -n 1) started" \
 	$LOG_SUMMARY
@@ -469,13 +492,18 @@ function install_gluster(){
 #
 function disable_firewall(){
 
-  local out
+  local out; local err
 
   #out=$(systemctl stop firewalld.service) # redundant with below?
   #display "systemctl stop: $out" $LOG_DEBUG
   #out=$(service iptables stop)  # redundant with above?
   out=$(iptables -F) # sure fire way to disable iptables
+  err=$?
   display "iptables: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: iptables error $err" $LOG_FORCE
+    exit 36
+  fi
 
   out=$(chkconfig iptables off) # preserve after reboot
   display "chkconfig off: $out" $LOG_DEBUG
@@ -486,13 +514,18 @@ function disable_firewall(){
 #
 function install_common(){
 
-  local out
+  local out; local err
 
   # install wget
   rpm -q wget >& /dev/null
   if (( $? != 0 )) ; then
     out=$(yum -y install wget)
+    err=$?
     display "install wget: $out" $LOG_DEBUG
+    if (( err != 0 )) ; then
+      display "ERROR: wget install error $err" $LOG_FORCE
+      exit 38
+    fi
   fi
 
   # set up /etc/hosts to map ip -> hostname
@@ -515,18 +548,16 @@ function install_common(){
   display "-- Downloading the Ambari repo file"
   get_ambari_repo
 
-  # install epel
-  echo
-  display "-- Installing EPEL package" $LOG_SUMMARY
-  install_epel
+  ## install epel -- SKIP: not applicable with fedora
+  #echo
+  #display "-- Installing EPEL package" $LOG_SUMMARY
+  #install_epel
 }
 
 # install_storage: perform the installation steps needed when the node is an
 #  ambari agent.
 #
 function install_storage(){
-
-  local out
 
   # install and start gluster
   echo
