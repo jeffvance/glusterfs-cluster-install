@@ -50,7 +50,7 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.03'   # self version
+INSTALL_VER='0.04'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
@@ -96,7 +96,7 @@ Syntax:
 $SCRIPT [-v|--version] | [-h|--help]
 
 $SCRIPT [--brick-mnt <path>] [--vol-name <name>] [--vol-mnt <path>]
-           [--replica <num>]    [--hosts <path>] [--mgmt-node <node>]
+           [--replica <num>]    [--hosts <path>]    [--mgmt-node <node>]
            [--logfile <path>]   [--verbose [num] ]
            [-q|--quiet]         [--debug]           [--old-deploy]
            brick-dev
@@ -184,10 +184,11 @@ function parse_cmd(){
   LOGFILE='/var/log/fedora-hadoop-install.log'
   VERBOSE=$LOG_SUMMARY
 
+  # note: $? *not* set for invalid option errors!
   local args=$(getopt -n "$SCRIPT" -o $OPTIONS --long $LONG_OPTS -- $@)
-  (( $? == 0 )) || { echo "$SCRIPT syntax error"; exit -1; }
 
   eval set -- "$args" # set up $1... positional args
+
   while true ; do
       case "$1" in
 	-h|--help)
@@ -234,21 +235,17 @@ function parse_cmd(){
 	--)  # no more args to parse
 	    shift; break
 	;;
-	*) echo "Error: Unknown option: \"$1\""; exit -1
-	;;
       esac
   done
 
   eval set -- "$@" # move arg pointer so $1 points to next arg past last opt
+  (( $# == 0 )) && {
+	echo "Brick device parameter is required"; short_usage; exit -1; }
+  (( $# > 1 )) && {
+	echo "Too many parameters: $@"; short_usage; exit -1; }
 
   # the brick dev is the only required parameter
   BRICK_DEV="$1"
-  if [[ -z "$BRICK_DEV" ]] ; then
-    echo "Syntax error: \"brick-dev\" is required"
-    /bin/sleep 1
-    short_usage
-    exit -1
-  fi
 
   # --logfile, if relative pathname make absolute
   # note: needed if scripts change cwd

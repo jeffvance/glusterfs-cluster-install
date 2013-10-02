@@ -176,7 +176,7 @@ function install_epel(){
   out=$(yum -y install epel-release 2>&1)
   err=$?
   display "epel install: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: epel install error $err" $LOG_FORCE
     exit 12
   fi
@@ -222,7 +222,7 @@ function install_ambari_agent(){
   out=$(yum -y install $RPM_FILE 2>&1)
   err=$?
   display "agent install: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: agent install error $err" $LOG_FORCE
     ##exit 18 # uncomment this after ambari rpm works!
   fi
@@ -277,10 +277,10 @@ function install_ambari_server(){
   # thousands of progress updates. On a terminal this is fine but when output
   # is redirected to disk you get a *very* long record. The invoking script will
   # delete this one very long record in order to make the logfile more usable.
-  out=$(yum -y install $server_rpm 2>&1)
+  out=$(yum -y install $RPM_FILE 2>&1)
   err=$?
   display "server install: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: server install error $err" $LOG_FORCE
     exit 24
   fi
@@ -399,22 +399,44 @@ function verify_fuse(){
 [$FEDORA_FUSE]
 name=$FEDORA_FUSE
 baseurl=$REPO_URL
+enabled=1
 EOF
  
   out=$(yum -y install perl)  # perl is a dependency
   err=$?
   display "install perl: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: perl install error $err" $LOG_FORCE
-    exit 28
+    exit 27
   fi
 
-  out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck \
-	-y  install p* k*)
+  #out=$(yum --disablerepo="*" --enablerepo="$FEDORA_FUSE" --nogpgcheck \
+	#-y  install p* k*)
+
+### TRIAL AND ERROR FOR NOW... per Daniel QE:
+  # see if installing elfutils-libs helps with fedora reboot issue...
+  out=$(yum install -y elfutils-libs)
   err=$?
+  display "elfutils-lib install: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: install elfutils error $err" $LOG_FORCE
+### exit 28
+  fi
+### END TRIAL AND ERROR...
+
+  out=$(yum -y --disablerepo='*' --enablerepo="$FEDORA_FUSE" --nogpgcheck \
+	install kernel kernel-devel perf python-perf)
   display "install fuse: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: install FUSE error $err" $LOG_FORCE
+    exit 29
+  fi
+  out=$(yum -y --disablerepo='*' --enablerepo='fedora-fuse' --nogpgcheck \
+	downgrade kernel-headers)
+  err=$?
+  display "downgrade fuse: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: downgrade FUSE error $err" $LOG_FORCE
     exit 30
   fi
   echo
@@ -466,22 +488,28 @@ function install_gluster(){
   out=$(yum -y install glusterfs glusterfs-server glusterfs-fuse 2>&1)
   err=$?
   display "gluster install: $out" $LOG_DEBUG
-  if (( err != 0 && err != 1 )) ; then # 1--> nothing-to-do
+  if (( err != 0 )) ; then
     display "ERROR: gluster install error $err" $LOG_FORCE
     exit 32
   fi
 
   # start gluster
-  #out=$(service glusterd start >& /dev/null)  # reports error on fedora19
-  out=$(systemctl start glusterd.service)
-  err=$?
-  display "gluster start: $out" $LOG_INFO
-  if (( err != 0 )) ; then
-    display "ERROR: gluster start error $err" $LOG_FORCE
-    exit 34
+  # note: glusterd start fails below (not known why). The work-around is to
+  # invoke /usr/sbin/glusterd directly
+  #out=$(systemctl start glusterd.service) 
+  #err=$?
+  #display "gluster start: $out" $LOG_INFO
+  #if (( err != 0 )) ; then
+    #display "ERROR: gluster start error $err" $LOG_FORCE
+    #exit 34
+  #fi
+  # fedora 19 work-around...
+  /usr/sbin/glusterd  # remove when systemctl start glusterd.service works
+  out=$(ps -e|grep glusterd|grep -v grep)
+  if [[ -z "$out" ]] ; then
+    display "ERROR: glusterd not started" $LOG_FORCE
+    exit 35
   fi
-  # f19 work-around ??
-  #/usr/sbin/glusterd  #????? not there!!
 
   display "   Gluster version: $(gluster --version | head -n 1) started" \
 	$LOG_SUMMARY
