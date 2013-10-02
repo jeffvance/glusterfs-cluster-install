@@ -47,10 +47,15 @@
 #  ** verified by this script
 #
 # See the usage() function for arguments and their definitions.
+###
+### NOTE: no ambari support for now due to issues with fedora 19. Ambari
+###   support will be added back as soon as the current fedora-ambari issues
+###   are solved.
+###
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.04'   # self version
+INSTALL_VER='0.05'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
@@ -252,6 +257,16 @@ function parse_cmd(){
   if [[ $(dirname "$LOGFILE") == '.' ]] ; then
     LOGFILE="$PWD/$LOGFILE"
   fi
+
+  # temp code to tell user to not use --mgmt-node since it ambari on f19 is
+  # not supported yet... remove this once current fedora-ambari issues are
+  # resolved...
+  if [[ -n "$MGMT_NODE" ]]; then
+    echo "ERROR for now: cannot specify a mgmt node until Ambari is supported"
+    echo "on Fedora... Please remove --mgmt-node for now..."
+    exit -1
+  fi
+  # end of temp code...
 }
 
 # verify_local_deploy_setup: make sure the expected deploy files are in
@@ -378,6 +393,7 @@ function report_deploy_values(){
   display "  \"hosts\" file:       $HOSTS_FILE"     $LOG_REPORT
   display "  Number of nodes:    $NUMNODES"         $LOG_REPORT
   display "  Management node:    $MGMT_NODE"        $LOG_REPORT
+  display "  **  NOTE: mgmt node is temporarily ignored **" $LOG_REPORT
   display "  Volume name:        $VOLNAME"          $LOG_REPORT
   display "  Volume mount:       $GLUSTER_MNT"      $LOG_REPORT
   display "  # of replicas:      $REPLICA_CNT"      $LOG_REPORT
@@ -676,6 +692,7 @@ function setup(){
   #       mounted.
   out=''
   for node in "${HOSTS[@]}"; do
+      out+="$node: "
       out+=$(ssh root@$node "
 	 /bin/mount $GLUSTER_MNT # from fstab
 	 ##glusterfs --attribute-timeout=0 --entry-timeout=0 --volfile-id=/$VOLNAME --volfile-server=$node $GLUSTER_MNT 2>&1 # (DELETE this for rhs 2.1)
@@ -684,11 +701,11 @@ function setup(){
 	 /bin/mkdir -p $MAPRED_SYSTEM_DIR 2>&1
 
 	 # create mapred scratch dir and gluster mnt owner and group
-       	 if ! /bin/grep -qsi \"^$GROUP\" /etc/group ; then
+       	 if ! /bin/grep -qsi \"^$GROUP:\" /etc/group ; then
 	   groupadd $GROUP 2>&1 # note: no password, no explicit GID!
        	 fi
-       	 if ! /bin/grep -qsi \"^$OWNER\" /etc/passwd ; then
-           # user added with no password and no hard-coded UID
+       	 if ! /bin/grep -qsi \"^$OWNER:\" /etc/passwd ; then
+           # add user but with no password and no hard-coded UID
            useradd --system -g $GROUP $OWNER 2>&1
        	 fi
 

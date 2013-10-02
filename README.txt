@@ -17,6 +17,7 @@
    - install.sh: the main install script, executed by the root user.
    - prep_node.sh: companion script, not to be executed directly.
    - README.txt: this file.
+   - devutils/: utility scripts, eg. password-less SSH setup.
  
   install.sh is the main script and should be run as the root user. It copies
   prep_node.sh and other files to each node contained in the "hosts" file, and

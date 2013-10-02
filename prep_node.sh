@@ -12,7 +12,7 @@
 #  - installs the gluster-hadoop plug-in,
 #  - checks if NTP is running and synchronized,
 #  - yum installs the ambai agent and/or ambari-server rpms depending on passed
-#    in arguments.
+#    in arguments.  # COMMENTED OUT FOR NOW...
 #  - installs the FUSE patch if it has not already been installed.
 #
 # Arguments (all positional):
@@ -23,6 +23,11 @@
 #
 # Note on passing arrays: the caller (install.sh) needs to surround the array
 # values with embedded double quotes, eg. "\"${ARRAY[@]}\""
+###
+### NOTE: no ambari support for now due to issues with fedora 19. Ambari
+###   support will be added back as soon as the current fedora-ambari issues
+###   are solved.
+###
 
 # constants and args
 NODE=$1
@@ -139,6 +144,7 @@ function install_plugin(){
 }
 
 # get_ambari_repo: wget the ambari.repo file.
+# NOTE: not currently used...
 #
 function get_ambari_repo(){
 
@@ -187,6 +193,7 @@ function install_epel(){
 # start automatically after a reboot.
 # Note: in a future version we may want to do 1 wget from s3 to the install-from
 #   host, and then scp the rpm to each agent node in parallel...
+# NOTE: not currently used...
 #
 function install_ambari_agent(){
 
@@ -224,7 +231,7 @@ function install_ambari_agent(){
   display "agent install: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: agent install error $err" $LOG_FORCE
-    ##exit 18 # uncomment this after ambari rpm works!
+    exit 18
   fi
 
   # modify the agent's .ini file's server hostname value
@@ -242,6 +249,7 @@ function install_ambari_agent(){
 
 # install_ambari_server: yum install the ambari server rpm, setup start the
 # server, start ambari server, and start the server after a reboot.
+# NOTE: not currently used...
 #
 function install_ambari_server(){
 
@@ -539,6 +547,7 @@ function disable_firewall(){
 
 # install_common: perform node installation steps independent of whether or not
 # the node is to be the ambari-server or an ambari-agent.
+# NOTE: there is no ambari setup supported at this time...
 #
 function install_common(){
 
@@ -574,7 +583,7 @@ function install_common(){
   # get Ambari repo file
   echo
   display "-- Downloading the Ambari repo file"
-  get_ambari_repo
+  ##get_ambari_repo ## SKIP for now...
 
   ## install epel -- SKIP: not applicable with fedora
   #echo
@@ -584,6 +593,7 @@ function install_common(){
 
 # install_storage: perform the installation steps needed when the node is an
 #  ambari agent.
+# NOTE: no ambari support for now...
 #
 function install_storage(){
 
@@ -602,8 +612,8 @@ function install_storage(){
 
   # install Ambari agent rpm
   echo
-  display "-- Installing Ambari agent" $LOG_SUMMARY
-  install_ambari_agent
+  ##display "-- Installing Ambari agent" $LOG_SUMMARY
+  ##install_ambari_agent
 
   # verify FUSE patch, if not installed yum install it.
   echo
@@ -620,6 +630,7 @@ function install_storage(){
 
 # install_mgmt: perform the installations steps needed when the node is the
 # ambari server.
+# NOTE: no ambari support for now...
 #
 function install_mgmt(){
 
@@ -657,7 +668,7 @@ rm -f $PREP_LOG
 install_common
 
 [[ $STORAGE_INSTALL == true ]] && install_storage
-[[ $MGMT_INSTALL == true    ]] && install_mgmt
+##[[ $MGMT_INSTALL == true    ]] && install_mgmt ##no ambari support for now...
 
 display "$(/bin/date). End: prep_node" $LOG_REPORT
 
