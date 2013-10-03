@@ -55,7 +55,7 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.05'   # self version
+INSTALL_VER='0.06'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
@@ -436,7 +436,7 @@ function cleanup(){
           if /bin/grep -qs $GLUSTER_MNT /proc/mounts ; then
             /bin/umount $GLUSTER_MNT
           fi")
-      display "$node: $out" $LOG_DEBUG
+      [[ -n "$out" ]] && display "$node: umount: $out" $LOG_DEBUG
   done
 
   # 2) stop vol on a single node, if started
@@ -612,7 +612,7 @@ function create_trusted_pool(){
 #
 function setup(){
 
-  local i=0; local node=''; local ip=''; local out
+  local i=0; local node=''; local ip=''; local out; local tmpout
   local PERMISSIONS='1777' # group sticky bit set
   local OWNER='mapred'; local GROUP='hadoop'
   local BRICK_MNT_OPTS="noatime,inode64"
@@ -692,10 +692,9 @@ function setup(){
   #       mounted.
   out=''
   for node in "${HOSTS[@]}"; do
-      out+="$node: "
-      out+=$(ssh root@$node "
+      tmpout=$(ssh root@$node "
 	 /bin/mount $GLUSTER_MNT # from fstab
-	 ##glusterfs --attribute-timeout=0 --entry-timeout=0 --volfile-id=/$VOLNAME --volfile-server=$node $GLUSTER_MNT 2>&1 # (DELETE this for rhs 2.1)
+	 ##glusterfs --attribute-timeout=0 --entry-timeout=0 --volfile-id=/$VOLNAME --volfile-server=$node $GLUSTER_MNT 2>&1
 
 	 # create mapred/system dir
 	 /bin/mkdir -p $MAPRED_SYSTEM_DIR 2>&1
@@ -712,9 +711,13 @@ function setup(){
 	 /bin/chown -R $OWNER:$GROUP $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1
 	 /bin/chmod -R $PERMISSIONS  $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1
       ")
-      out+="\n"
+      if [[ -n "$tmpout" ]] ; then
+	out+="$node: "
+	out+="$tmpout"
+ 	out+="\n"
+      fi
   done
-  display "$out" $LOG_DEBUG
+  [[ -n "$out" ]] && display "$out" $LOG_DEBUG
 }
 
 # install_nodes: for each node in the hosts file copy the "data" sub-directory
