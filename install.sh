@@ -55,7 +55,7 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.06'   # self version
+INSTALL_VER='0.07'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
@@ -102,9 +102,11 @@ $SCRIPT [-v|--version] | [-h|--help]
 
 $SCRIPT [--brick-mnt <path>] [--vol-name <name>] [--vol-mnt <path>]
            [--replica <num>]    [--hosts <path>]    [--mgmt-node <node>]
-           [--logfile <path>]   [--verbose [num] ]
-           [-q|--quiet]         [--debug]           [--old-deploy]
+           [--logfile <path>]   [--verbose [num] ]  [-y]
+           [-q|--quiet]         [--debug]           [--old-deploy*]
            brick-dev
+
+* not implemented
 
 EOF
 }
@@ -147,6 +149,8 @@ EOF
                        Default: the first node appearing in the "hosts" file.
   --logfile   <path> : logfile name.
                        Default is "/var/log/gluster-hadoop-install.log".
+  -y                 : suppress prompts and auto-answer "yes". Default is to
+                       prompt the user.
   --verbose   [=num] : set the verbosity level to a value of 0, 1, 2, 3. If
                        --verbose is omitted the default value is 2(summary). If
                        --verbose is supplied with no value verbosity is set to
@@ -174,7 +178,7 @@ EOF
 #
 function parse_cmd(){
 
-  local OPTIONS='vhq'
+  local OPTIONS='vhqy'
   local LONG_OPTS='brick-mnt:,vol-name:,vol-mnt:,replica:,hosts:,mgmt-node,logfile:,verbose::,old-deploy,help,version,quiet,debug'
 
   # defaults (global variables)
@@ -188,6 +192,7 @@ function parse_cmd(){
   MGMT_NODE=''
   LOGFILE='/var/log/fedora-hadoop-install.log'
   VERBOSE=$LOG_SUMMARY
+  ANS_YES='n'
 
   # note: $? *not* set for invalid option errors!
   local args=$(getopt -n "$SCRIPT" -o $OPTIONS --long $LONG_OPTS -- $@)
@@ -228,6 +233,9 @@ function parse_cmd(){
             [[ -z "$VERBOSE" ]] && VERBOSE=$LOG_INFO # default
 	    shift 2; continue
 	;;
+        -y)
+            ANS_YES='y'; shift; continue
+        ;;
 	-q|--quiet)
 	    VERBOSE=$LOG_QUIET; shift; continue
 	;;
@@ -406,9 +414,10 @@ function report_deploy_values(){
   display "  Log file:           $LOGFILE"          $LOG_REPORT
   display    "_______________________________________" $LOG_REPORT
 
-  (( VERBOSE < LOG_QUIET )) && read -p "Continue? [y|N] " ans
+  [[ $VERBOSE < $LOG_QUIET && "$ANS_YES" == 'n' ]] && {
+        read -p "Continue? [y|N] " ans; }
   case $ans in
-    y|yes|Y|YES|Yes ) # ok, do nothing
+    y|yes|Y|YES|Yes) # ok, do nothing
     ;;
     * ) exit 0
   esac
@@ -884,12 +893,16 @@ function perf_config(){
 #
 function reboot_self(){
 
-  local ans=''
+  local ans='y'
 
   echo "*** Your system ($(hostname -s)) needs to be rebooted to complete the"
   echo "    installation of the FUSE patch."
-  read -p "    Reboot now? [y|N] " ans
-  [[ "$ans" == 'Y' || "$ans" == 'y' ]] && reboot # bye!
+  [[ "$ANS_YES" == 'n' ]] && read -p "    Reboot now? [y|N] " ans
+  case $ans in
+    y|yes|Y|YES|Yes) reboot
+    ;;
+    *) exit 0
+  esac
   echo "No reboot! You must reboot your system prior to running Hadoop jobs."
 }
 
