@@ -38,7 +38,7 @@ HOST_IPS=($5)
 MGMT_NODE="$6" # note: this node can be inside or outside the storage cluster
 VERBOSE=$7
 PREP_LOG=$8
-DEPLOY_DIR=${9:-/tmp/gluster-hadoop-install/data/}
+DEPLOY_DIR=${9:-/tmp/glusterfs-cluster-install/}
 #echo -e "*** $(basename $0)\n 1=$NODE, 2=$STORAGE_INSTALL, 3=$MGMT_INSTALL, 4=${HOSTS[@]}, 5=${HOST_IPS[@]}, 6=$MGMT_NODE, 7=$VERBOSE, 8=$PREP_LOG, 9=$DEPLOY_DIR"
 
 NUMNODES=${#HOSTS[@]}
@@ -493,13 +493,16 @@ function install_gluster(){
   local out; local err
 
   # install gluster
-  out=$(yum -y install glusterfs glusterfs-server glusterfs-fuse 2>&1)
+  out=$(yum -y install \
+	glusterfs glusterfs-server glusterfs-libs glusterfs-fuse 2>&1)
   err=$?
   display "gluster install: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: gluster install error $err" $LOG_FORCE
     exit 32
   fi
+  out=$(rpm -qa gluster*)
+  display "gluster versions: $out" $LOG_DEBUG
 
   # start gluster
   # note: glusterd start fails below (not known why). The work-around is to

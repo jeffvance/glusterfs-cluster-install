@@ -2,11 +2,11 @@
 #
 # This script creates the install tarball package. Currently this includes the
 # following files:
-#  * fedora-hadoop-install-<verison> directory whicn contains:
-#  - hosts.example
-#  - install.sh
-#  - prep_node.sh
-#  - README.txt
+#  * glusterfs-cluster-install-<verison> directory which contains:
+#    - hosts.example
+#    - install.sh
+#    - prep_node.sh
+#    - README.txt
 #
 # This script is expected to be run from a git repo so that source version
 # info can be used in the tarball filename. The --source and --target-dir
@@ -22,8 +22,8 @@ function usage(){
 
   cat <<EOF
 
-This script creates the fedora-hadoop-install tarball package. There are no
-required parameters.
+This script creates the glusterfs-cluster-install tarball package. There are
+no required parameters.
 
 SYNTAX:
 
@@ -98,9 +98,9 @@ function parse_cmd(){
 #
 function create_tarball(){
 
-  # tarball contains the fedora-hadoop-install-<version> dir, thus we have to
-  # copy target files under this dir, create the tarball and then rm the dir
-  local TARBALL_PREFIX="fedora-hadoop-install-$PKG_VERSION"
+  # tarball contains the glusterfs-cluster-install-<version> dir, thus we have
+  # to copy target files under this dir, create the tarball and then rm the dir
+  local TARBALL_PREFIX="glusterfs-cluster-install-$PKG_VERSION"
   local TARBALL="$TARBALL_PREFIX.tar.gz"
   local TARBALL_DIR="$TARBALL_PREFIX" # scratch dir not TARGET dir
   local TARBALL_PATH="$TARBALL_DIR/$TARBALL"

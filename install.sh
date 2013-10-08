@@ -6,12 +6,10 @@
 # This script (and the companion prep_node.sh script) helps to set up Gluster
 # for Hadoop workloads on Fedora. 
 #
-# A tarball named "fedora-hadoop-install-<version>.tar.gz" is downloaded to one
-# of the
-# cluster nodes or to the user's localhost.  Password-less ssh is needed from
-# the node hosting the install tarball to all nodes
-# in the cluster. Password-less ssh is not necessary to and from all nodes
-# within the cluster.
+# A tarball named "glusterfs-cluster-install-<version>.tar.gz" is downloaded to
+# one of the cluster nodes or to the user's localhost.  Password-less ssh is
+# needed from the node hosting the install tarball to all nodes in the cluster.
+# Password-less ssh is not necessary to and from all nodes within the cluster.
 #
 # The install tarball contains the following:
 #  - hosts.example: sample "hosts" config file
@@ -55,10 +53,10 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.07'   # self version
+INSTALL_VER='0.08'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
-REMOTE_INSTALL_DIR="/tmp/gluster-hadoop-install/" # on each node
+REMOTE_INSTALL_DIR="/tmp/glusterfs-cluster-install/" # on each node
 # companion install script name
 PREP_SH='prep_node.sh'
 NUMNODES=0           # number of nodes in hosts file (= trusted pool size)
@@ -148,7 +146,7 @@ EOF
   --mgmt-node <node> : hostname of the node to be used as the management node.
                        Default: the first node appearing in the "hosts" file.
   --logfile   <path> : logfile name.
-                       Default is "/var/log/gluster-hadoop-install.log".
+                       Default is "/var/log/glusterfs-cluster-install.log".
   -y                 : suppress prompts and auto-answer "yes". Default is to
                        prompt the user.
   --verbose   [=num] : set the verbosity level to a value of 0, 1, 2, 3. If
@@ -190,7 +188,7 @@ function parse_cmd(){
   # "hosts" file contains hostname ip-addr for all nodes in cluster
   HOSTS_FILE="$INSTALL_DIR/hosts"
   MGMT_NODE=''
-  LOGFILE='/var/log/fedora-hadoop-install.log'
+  LOGFILE='/var/log/glusterfs-cluster-install.log'
   VERBOSE=$LOG_SUMMARY
   ANS_YES='n'
 

@@ -6,9 +6,9 @@
   GlusterFS on Fedora for Hadoop workloads.  The storage (brick) partition
   (usually /dev/sdb) can be configured as RAID 6 or as JBODs.
  
-  A tarball named "fedora-hadoop-install-<version>.tar.gz" is downloaded to one
-  of the cluster nodes or to the user's localhost. The download directory is
-  arbitrary. install.sh requires password-less ssh from the node hosting the
+  A tarball named "glusterfs-cluster-install-<version>.tar.gz" is downloaded to
+  one of the cluster nodes or to the user's localhost. The download directory
+  is arbitrary. install.sh requires password-less ssh from the node hosting the
   rhs install tarball (the "install-from" node) to all nodes in the cluster.
   GlusterFS does not require password-less SSH.
  
@@ -54,14 +54,14 @@
 == Installation ==
 
 Instructions:
- 0) upload fedora-hadoop-install-<version> tarball to the deployment directory
-    on the "install-from" node.
+ 0) upload glusterfs-cluster-install-<version> tarball to the deployment
+    directory on the "install-from" node.
 
  1) extract tarball to the local directory:
-    $ tar xvzf fedora-hadoop-install-<version>.tar.gz
+    $ tar xvzf glusterfs-cluster-install-<version>.tar.gz
 
- 2) cd to the extracted fedora-hadoop-install directory:
-    $ cd fedora-hadoop-install-<version>
+ 2) cd to the extracted glusterfs-cluster-install directory:
+    $ cd glusterfs-cluster-install-<version>
 
  3) execute "install.sh" from the install directory:
     $ ./install.sh [options (see --help)] <brick-dev> (note: brick_dev is 
@@ -69,8 +69,8 @@ Instructions:
     For example: ./install.sh /dev/sdb
 
     Output is displayed on STDOUT and is also written to:
-       /var/log/gluster-hadoop-install.log
-    on both the delpoyment node and on each data node in the cluster.
+       /var/log/glusterfs-cluster-install.log
+    on both the delpoyment node.
 
  4) The script should complete at which ...
 
