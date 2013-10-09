@@ -365,9 +365,13 @@ function verify_install_ntp(){
   ps -C ntpd >& /dev/null
   if (( $? != 0 )) ; then
     display "   Starting ntpd" $LOG_DEBUG
-    ntpd -qg
-    chkconfig ntpd on 2>&1  # run on reboot
-    sleep 2
+    out=$(ntpd -qg 2>&1)
+    display "ntpd: $out" $LOG_DEBUG
+    ps -C ntpd >& /dev/null # see if ntpd running now...
+    (( $? != 0 )) && display "WARN: ntpd not running!" $LOG_FORCE
+    out=$(systemctl enable ntpd.service 2>&1)  # run on reboot
+    display "systemctl enable: $out" $LOG_DEBUG
+    sleep 2 # may? need to wait before doing ntpstat below...
   fi
 
   ntpstat >& /dev/null
@@ -394,7 +398,7 @@ function verify_fuse(){
 
   # if the fuse repo file exists and contains the "fedora-fuse" then assume
   # that the fuse patch has already been installed
-  [[ -f "$FUSE_REPO" && -n "$(/bin/grep -s '$FEDORA_FUSE' $FUSE_REPO)" ]] && {
+  [[ -f "$FUSE_REPO" && -n "$(/bin/grep -s $FEDORA_FUSE $FUSE_REPO)" ]] && {
     display "   ... verified" $LOG_DEBUG;
     return;
   }
@@ -439,7 +443,7 @@ EOF
     display "ERROR: install FUSE error $err" $LOG_FORCE
     exit 29
   fi
-  out=$(yum -y --disablerepo='*' --enablerepo='fedora-fuse' --nogpgcheck \
+  out=$(yum -y --disablerepo='*' --enablerepo="$FEDORA_FUSE" --nogpgcheck \
 	downgrade kernel-headers)
   err=$?
   display "downgrade fuse: $out" $LOG_DEBUG
@@ -544,8 +548,8 @@ function disable_firewall(){
     exit 36
   fi
 
-  out=$(chkconfig iptables off) # preserve after reboot
-  display "chkconfig off: $out" $LOG_DEBUG
+  out=$(systemctl disable iptables.service 2>&1) # keep off after reboot
+  display "systemctl disable: $out" $LOG_DEBUG
 }
 
 # install_common: perform node installation steps independent of whether or not
@@ -585,7 +589,7 @@ function install_common(){
 
   # get Ambari repo file
   echo
-  display "-- Downloading the Ambari repo file"
+  ##display "-- Downloading the Ambari repo file"
   ##get_ambari_repo ## SKIP for now...
 
   ## install epel -- SKIP: not applicable with fedora

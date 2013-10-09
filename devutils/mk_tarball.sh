@@ -104,7 +104,7 @@ function create_tarball(){
   local TARBALL="$TARBALL_PREFIX.tar.gz"
   local TARBALL_DIR="$TARBALL_PREFIX" # scratch dir not TARGET dir
   local TARBALL_PATH="$TARBALL_DIR/$TARBALL"
-  local FILES_TO_TAR=(ambari.repo install.sh prep_node.sh README.txt hosts.example)
+  local FILES_TO_TAR=(install.sh prep_node.sh README.txt hosts.example)
   local f
 
   echo -e "\n  - Creating $TARBALL tarball in $TARGET"

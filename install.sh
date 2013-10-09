@@ -53,7 +53,7 @@
 
 # set global variables
 SCRIPT=$(/bin/basename $0)
-INSTALL_VER='0.08'   # self version
+INSTALL_VER='0.09'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/glusterfs-cluster-install/" # on each node
@@ -390,7 +390,14 @@ function verify_local_deploy_setup(){
 function report_deploy_values(){
 
   local ans='y'
+  local OS_RELEASE='/etc/redhat-release'
+  local OS
 
+  # assume 1st node is representative
+  OS="$(ssh root@$firstNode cat $OS_RELEASE)"
+ 
+  display
+  display "OS:                   $OS" $LOG_REPORT
   display
   display "__________ Deployment Values __________" $LOG_REPORT
   display "  Install-from dir:   $INSTALL_DIR"      $LOG_REPORT
@@ -840,7 +847,6 @@ function install_nodes(){
 function reboot_nodes(){
 
   local ip; local i; local msg; local num
-return  # for now till the f19 fuse/reboot problem is solved...
 
   num=${#REBOOT_NODES[@]} # number of nodes to reboot
   if (( num > 0 )) ; then
