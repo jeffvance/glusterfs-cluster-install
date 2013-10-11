@@ -348,7 +348,7 @@ function verify_install_java(){
   fi
 }
 
-# verify_install_ntp: verify that ntp is installed and synchronized.
+# verify_install_ntp: verify that ntp is installed, running, and synchronized.
 #
 function verify_install_ntp(){
 
@@ -357,23 +357,34 @@ function verify_install_ntp(){
   rpm -q ntp >& /dev/null
   if (( $? != 0 )) ; then
     display "   Installing NTP" $LOG_INFO
-    out=$(yum install -y ntp)
+    out=$(yum -y install ntp)
     display "yum install ntp: $out" $LOG_DEBUG
   fi
+
+  # run ntpd on reboot
+  out=$(systemctl enable ntpd.service 2>&1)
+  display "systemctl enable: $out" $LOG_DEBUG
 
   # start ntpd if not running
   ps -C ntpd >& /dev/null
   if (( $? != 0 )) ; then
     display "   Starting ntpd" $LOG_DEBUG
-    out=$(ntpd -qg 2>&1)
-    display "ntpd: $out" $LOG_DEBUG
-    ps -C ntpd >& /dev/null # see if ntpd running now...
-    (( $? != 0 )) && display "WARN: ntpd not running!" $LOG_FORCE
-    out=$(systemctl enable ntpd.service 2>&1)  # run on reboot
-    display "systemctl enable: $out" $LOG_DEBUG
-    sleep 2 # may? need to wait before doing ntpstat below...
+    out=$(systemctl start ntpd.service 2>&1)
+    display "ntpd start: $out" $LOG_DEBUG
+    ps -C ntpd >& /dev/null # see if ntpd is running now...
+    if (( $? != 0 )) ; then
+      display "WARN: ntpd did NOT start" $LOG_FORCE
+      return # no point in doing the rest...
+    fi
   fi
 
+  # set time now (ntpdate is being deprecated)
+  out=$(ntpd -qg 2>&1)
+  err=$?
+  display "ntpd -qg: $out" $LOG_DEBUG
+  (( err != 0 )) && display "WARN: ntpd -qg (aka ntpdate) error $err" $LOG_FORCE
+
+  # report ntp synchronization state
   ntpstat >& /dev/null
   err=$?
   if (( err == 0 )) ; then 
@@ -427,7 +438,7 @@ EOF
 
 ### TRIAL AND ERROR FOR NOW... per Daniel QE:
   # see if installing elfutils-libs helps with fedora reboot issue...
-  out=$(yum install -y elfutils-libs)
+  out=$(yum -y install elfutils-libs)
   err=$?
   display "elfutils-lib install: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
@@ -446,7 +457,7 @@ EOF
   out=$(yum -y --disablerepo='*' --enablerepo="$FEDORA_FUSE" --nogpgcheck \
 	downgrade kernel-headers)
   err=$?
-  display "downgrade fuse: $out" $LOG_DEBUG
+  display "downgrade kernel hdrs: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: downgrade FUSE error $err" $LOG_FORCE
     exit 30
@@ -490,7 +501,8 @@ function sudoers(){
   display "$out" $LOG_DEBUG
 }
 
-# install_gluster: install and start glusterfs.
+# install_gluster: install and start gluster. Note: if SELinux is enabled then
+# glusterd may not be able to be started and persisted across reboots.
 #
 function install_gluster(){
 
@@ -508,26 +520,56 @@ function install_gluster(){
   out=$(rpm -qa gluster*)
   display "gluster versions: $out" $LOG_DEBUG
 
+  # persist glusterd across reboots
+  out=$(systemctl enable glusterd.service)
+  err=$?
+  display "systemctl enable: $out" $LOG_DEBUG
+  (( err != 0 )) && display "WARN: systemctl enable error $err" $LOG_FORCE 
+
   # start gluster
-  # note: glusterd start fails below (not known why). The work-around is to
-  # invoke /usr/sbin/glusterd directly
-  #out=$(systemctl start glusterd.service) 
-  #err=$?
-  #display "gluster start: $out" $LOG_INFO
-  #if (( err != 0 )) ; then
-    #display "ERROR: gluster start error $err" $LOG_FORCE
-    #exit 34
-  #fi
-  # fedora 19 work-around...
-  /usr/sbin/glusterd  # remove when systemctl start glusterd.service works
-  out=$(ps -e|grep glusterd|grep -v grep)
-  if [[ -z "$out" ]] ; then
+  out=$(systemctl start glusterd.service) 
+  err=$?
+  display "gluster start: $out" $LOG_INFO
+  if (( err != 0 )) ; then
+    display "ERROR: gluster start error $err" $LOG_FORCE
+    exit 34
+  fi
+  ps -C glusterd >& /dev/null
+  if (( $? != 0 )) ; then
     display "ERROR: glusterd not started" $LOG_FORCE
     exit 35
   fi
 
   display "   Gluster version: $(gluster --version | head -n 1) started" \
 	$LOG_SUMMARY
+}
+
+# check_disable_selinux: if selinux is enabled then disable it. This seesms to
+# be necessary so that glusterd can be run and persisted across boots.
+#
+function check_disable_selinux(){
+
+  local out
+  local CONF='/etc/sysconfig/selinux'
+  local SELINUX_KEY='SELINUX='
+  local DISABLED='disabled'; local ENABLED='enabled'
+
+  # report selinux state
+  out=$(sestatus | head -n 1 | awk '{print $3}') # enabled, permissive...
+  echo
+  display "SELinux is: $out" $LOG_SUMMARY
+ 
+  [[ "$out" != "$ENABLED" ]] && return # done
+
+  # disable selinux (if permissive then left as is)
+  setenforce 0 # disable selinux now (might not be working on f19...)
+  if [[ ! -f $CONF ]] ; then
+    display "WARN: SELinux config file $CONF missing" $LOG_FORCE
+    return # nothing more to do...
+  fi
+  # set SELINUX=disabled which takes affect the next reboot
+  display "-- Disabling SELinux..." $LOG_SUMMARY
+  sed -i -e "/^$SELINUX_KEY/c\\$SELINUX_KEY$DISABLED" $CONF
 }
 
 # disable_firewall: use iptables to disable the firewall, needed by Ambari and
@@ -537,15 +579,11 @@ function disable_firewall(){
 
   local out; local err
 
-  #out=$(systemctl stop firewalld.service) # redundant with below?
-  #display "systemctl stop: $out" $LOG_DEBUG
-  #out=$(service iptables stop)  # redundant with above?
   out=$(iptables -F) # sure fire way to disable iptables
   err=$?
   display "iptables: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
-    display "ERROR: iptables error $err" $LOG_FORCE
-    exit 36
+    display "WARN: iptables error $err" $LOG_FORCE
   fi
 
   out=$(systemctl disable iptables.service 2>&1) # keep off after reboot
@@ -565,12 +603,17 @@ function install_common(){
   if (( $? != 0 )) ; then
     out=$(yum -y install wget)
     err=$?
+    echo
     display "install wget: $out" $LOG_DEBUG
     if (( err != 0 )) ; then
       display "ERROR: wget install error $err" $LOG_FORCE
       exit 38
     fi
   fi
+
+  # disable SELinux
+  echo
+  check_disable_selinux
 
   # set up /etc/hosts to map ip -> hostname
   echo

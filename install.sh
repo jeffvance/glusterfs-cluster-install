@@ -846,34 +846,34 @@ function install_nodes(){
 #
 function reboot_nodes(){
 
-  local ip; local i; local msg; local num
+  local ip; local i; local msg
+  local num=${#REBOOT_NODES[@]} # number of nodes to reboot
 
-  num=${#REBOOT_NODES[@]} # number of nodes to reboot
-  if (( num > 0 )) ; then
-    echo
-    msg='node'
-    (( num != 1 )) && msg+='s'
-    display "-- $num $msg will be rebooted..." $LOG_SUMMARY
-    for ip in "${REBOOT_NODES[@]}"; do
-	display "   * rebooting node: $ip..." $LOG_INFO
-	ssh root@$ip reboot -f &  # reboot asynchronously
-    done
+  (( num <= 0 )) && return # no nodes to reboot
 
-    # makes sure all rebooted nodes are back up before returning
-    while true ; do
-	for i in "${!REBOOT_NODES[@]}"; do # array of non-null element indices
-	    ip=${REBOOT_NODES[$i]}         # unset leaves sparse array
-	    # if possible to ssh to ip then unset that array entry
-	    ssh -q -oBatchMode=yes root@$ip exit
-	    if (( $? == 0 )) ; then
-	      display "   * node $ip sucessfully rebooted" $LOG_DEBUG
-	      unset REBOOT_NODES[$i] # null entry in array
-	    fi
-	done
-	(( ${#REBOOT_NODES[@]} == 0 )) && break # exit loop
-	sleep 10
-    done
-  fi
+  echo
+  msg='node'
+  (( num != 1 )) && msg+='s'
+  display "-- $num $msg will be rebooted..." $LOG_SUMMARY
+  for ip in "${REBOOT_NODES[@]}"; do
+      display "   * rebooting node: $ip..." $LOG_INFO
+      ssh root@$ip reboot -f &  # reboot asynchronously
+  done
+
+  # makes sure all rebooted nodes are back up before returning
+  while true ; do
+      for i in "${!REBOOT_NODES[@]}"; do # array of non-null element indices
+	  ip=${REBOOT_NODES[$i]}         # unset leaves sparse array
+	  # if possible to ssh to ip then unset that array entry
+	  ssh -q -oBatchMode=yes root@$ip exit
+	  if (( $? == 0 )) ; then
+	    display "   * node $ip sucessfully rebooted" $LOG_DEBUG
+	    unset REBOOT_NODES[$i] # null entry in array
+	  fi
+      done
+      (( ${#REBOOT_NODES[@]} == 0 )) && break # exit loop
+      sleep 10
+  done
 }
 
 # perf_config: assign the non-default gluster volume attributes below.
