@@ -502,7 +502,7 @@ function sudoers(){
 }
 
 # install_gluster: install and start gluster. Note: if SELinux is enabled then
-# glusterd may not be able to be started and persisted across reboots.
+# glusterd may not be able to be started and persist across reboots.
 #
 function install_gluster(){
 
@@ -527,9 +527,9 @@ function install_gluster(){
   (( err != 0 )) && display "WARN: systemctl enable error $err" $LOG_FORCE 
 
   # start gluster
-  out=$(systemctl start glusterd.service) 
+  out=$(systemctl start glusterd.service 2>&1)
   err=$?
-  display "gluster start: $out" $LOG_INFO
+  display "gluster start: $out" $LOG_DEBUG
   if (( err != 0 )) ; then
     display "ERROR: gluster start error $err" $LOG_FORCE
     exit 34
@@ -544,32 +544,47 @@ function install_gluster(){
 	$LOG_SUMMARY
 }
 
-# check_disable_selinux: if selinux is enabled then disable it. This seesms to
-# be necessary so that glusterd can be run and persisted across boots.
+# check_selinux: if selinux is enabled then set it to permissive. This seems
+# to be necessary so that glusterd can be run and persist across boots.
+# NOTE: most google search pages will say to set SELINUX=pemissive in the
+#  file /etc/sysconfig/selinux. This file is supposed to be a symlink to
+#  /etc/selinux/config and it is on f-18, BUT it is NOT on f-19. Therefore,
+#  modifying /etc/sysconfig/selinux on f-19 has NO effect on selinux. This
+#  function will rm that file and replace it with a symlink to the correct
+#  file, and then set selinux to permissive mode.
 #
-function check_disable_selinux(){
+function check_selinux(){
 
   local out
-  local CONF='/etc/sysconfig/selinux'
+  local SYMLINK='/etc/sysconfig/selinux'
+  local CONF='/etc/selinux/config' # real config file
   local SELINUX_KEY='SELINUX='
-  local DISABLED='disabled'; local ENABLED='enabled'
+  local PERMISSIVE='permissive'; local ENABLED='enabled'
+
+  # f19 bug: fix symlink problem first
+  if [[ ! -L $SYMLINK ]] ; then # file exists but is not symlink or is missing
+    display "creating $SYMLINK file" $LOG_DEBUG
+    rm -f $SYMLINK
+    ln -s $CONF $SYMLINK
+  fi
+  # end f-19 bug fix
 
   # report selinux state
-  out=$(sestatus | head -n 1 | awk '{print $3}') # enabled, permissive...
+  out=$(sestatus | head -n 1 | awk '{print $3}') # enforcing, permissive
   echo
   display "SELinux is: $out" $LOG_SUMMARY
  
   [[ "$out" != "$ENABLED" ]] && return # done
 
-  # disable selinux (if permissive then left as is)
-  setenforce 0 # disable selinux now (might not be working on f19...)
+  # set selinux to permissive (audit errors reported but not enforced)
+  setenforce permissive
   if [[ ! -f $CONF ]] ; then
     display "WARN: SELinux config file $CONF missing" $LOG_FORCE
     return # nothing more to do...
   fi
-  # set SELINUX=disabled which takes affect the next reboot
-  display "-- Disabling SELinux..." $LOG_SUMMARY
-  sed -i -e "/^$SELINUX_KEY/c\\$SELINUX_KEY$DISABLED" $CONF
+  # config SELINUX=permissive which takes effect the next reboot
+  display "-- Setting SELinux to permissive..." $LOG_SUMMARY
+  sed -i -e "/^$SELINUX_KEY/c\\$SELINUX_KEY$PERMISSIVE" $CONF
 }
 
 # disable_firewall: use iptables to disable the firewall, needed by Ambari and
@@ -611,9 +626,9 @@ function install_common(){
     fi
   fi
 
-  # disable SELinux
+  # set SELinux to permissive if it's enabled
   echo
-  check_disable_selinux
+  check_selinux
 
   # set up /etc/hosts to map ip -> hostname
   echo
