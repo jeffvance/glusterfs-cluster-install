@@ -528,7 +528,7 @@ function verify_pool_created(){
     display "   Trusted pool formed..." $LOG_DEBUG
   else
     display "   FATAL ERROR: Trusted pool NOT formed..." $LOG_FORCE
-    exit 5
+    exit 3
   fi
 }
 
@@ -551,7 +551,7 @@ function verify_vol_created(){
     display "   Volume \"$VOLNAME\" created..." $LOG_DEBUG
   else
     display "   FATAL ERROR: Volume \"$VOLNAME\" creation failed..." $LOG_FORCE
-    exit 10
+    exit 5 
   fi
 }
 
@@ -583,7 +583,7 @@ function verify_vol_started(){
     display "   Volume \"$VOLNAME\" started..." $LOG_DEBUG
   else
     display "   FATAL ERROR: Volume \"$VOLNAME\" NOT started...\nTry gluster volume status $VOLNAME" $LOG_FORCE
-    exit 15
+    exit 7
   fi
 }
 
@@ -648,18 +648,18 @@ function setup(){
       ip="${HOST_IPS[$i]}"
       out="$(ssh root@$node "mkfs -t xfs -i size=512 -f $BRICK_DEV 2>&1")"
       (( $? != 0 )) && {
-	display "ERROR: $node: mkfs.xfs: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: mkfs.xfs: $out" $LOG_FORCE; exit 9; }
       display "mkfs.xfs: $out" $LOG_DEBUG
 
       # volname dir under brick by convention
       out="$(ssh root@$node "mkdir -p $BRICK_MNT 2>&1")"
       (( $? != 0 )) && {
-	display "ERROR: $node: mkdir $BRICK_MNT: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: mkdir $BRICK_MNT: $out" $LOG_FORCE; exit 11; }
       display "mkdir $BRICK_MNT: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "mkdir -p $GLUSTER_MNT 2>&1")"
       (( $? != 0 )) && {
-	display "ERROR: $node: mkdir $GLUSTER_MNT: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: mkdir $GLUSTER_MNT: $out" $LOG_FORCE; exit 13; }
       display "mkdir $GLUSTER_MNT: $out" $LOG_DEBUG
 
       # append brick and gluster mounts to fstab
@@ -672,7 +672,7 @@ function setup(){
 		>>/etc/fstab
 	fi")"
       (( $? != 0 )) && {
-	display "ERROR: $node: append fstab: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: append fstab: $out" $LOG_FORCE; exit 15; }
       display "append fstab: $out" $LOG_DEBUG
 
       # Note: mapred scratch dir must be created *after* the brick is
@@ -681,13 +681,13 @@ function setup(){
       # is mounted for the same reason -- see below.
       out="$(ssh root@$node "mount $BRICK_DIR 2>&1")" # mount via fstab
       (( $? != 0 )) && {
-	display "ERROR: $node: mount $BRICK_DIR: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: mount $BRICK_DIR: $out" $LOG_FORCE; exit 17; }
       display "append fstab: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "mkdir -p $MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $MAPRED_SCRATCH_DIR: $out" $LOG_FORCE;
-	exit xx; }
+	exit 19; }
       display "mkdir $MAPRED_SCRATCH_DIR: $out" $LOG_DEBUG
   done
 
@@ -729,13 +729,13 @@ function setup(){
   for node in "${HOSTS[@]}"; do
       out="$(ssh root@$node "mount $GLUSTER_MNT 2>&1")" # from fstab
       (( $? != 0 )) && {
-	display "ERROR: $node: mount $GLUSTER_MNT: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: mount $GLUSTER_MNT: $out" $LOG_FORCE; exit 21; }
       display "mount $GLUSTER_MNT: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "mkdir -p $MAPRED_SYSTEM_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $MAPRED_SYSTEM_DIR: $out" $LOG_FORCE;
-	exit xx; }
+	exit 23; }
       display "mkdir $MAPRED_SYSTEM_DIR: $out" $LOG_DEBUG
 
       # create mapred scratch dir and gluster mnt owner and group
@@ -744,7 +744,7 @@ function setup(){
 	  groupadd $GROUP 2>&1 # note: no password, no explicit GID!
 	fi")"
       (( $? != 0 )) && {
-	display "ERROR: $node: groupadd $GROUP: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: groupadd $GROUP: $out" $LOG_FORCE; exit 25; }
       display "groupadd $GROUP: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "
@@ -753,19 +753,19 @@ function setup(){
 	  useradd --system -g $GROUP $OWNER 2>&1
 	fi")"
       (( $? != 0 )) && {
-	display "ERROR: $node: useradd $OWNER: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: useradd $OWNER: $out" $LOG_FORCE; exit 27; }
       display "useradd $OWNER: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "chown -R $OWNER:$GROUP $GLUSTER_MNT \
 	$MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
-	display "ERROR: $node: chown $OWNER:$GROUP: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: chown $OWNER:$GROUP: $out" $LOG_FORCE; exit 30; }
       display "chown $OWNER:$GROUP: $out" $LOG_DEBUG
 
       out="$(ssh root@$node "chmod -R $PERMISSIONS  $GLUSTER_MNT \
 	$MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
-	display "ERROR: $node: chmod $GLUSTER_MNT: $out" $LOG_FORCE; exit xx; }
+	display "ERROR: $node: chmod $GLUSTER_MNT: $out" $LOG_FORCE; exit 33; }
       display "chmod $GLUSTER_MNT: $out" $LOG_DEBUG
   done
 }
@@ -835,7 +835,7 @@ function install_nodes(){
     elif (( err != 0 )) ; then # fatal error in install.sh so quit now
       display " *** ERROR! prep_node script exited with error: $err ***" \
 	$LOG_FORCE
-      exit 20
+      exit 40
     fi
   }
 
