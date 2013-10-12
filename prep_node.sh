@@ -77,7 +77,7 @@ function fixup_etc_hosts_file(){
         host="${HOSTS[$i]}"
         ip="${HOST_IPS[$i]}"
 	# skip if host already present in /etc/hosts
-        if /bin/grep -qs "$host" /etc/hosts; then # found self node
+        if grep -qs "$host" /etc/hosts; then # found self node
           continue # skip to next node
         fi
         hosts_buf+="$ip $host"$'\n' # \n at end
@@ -109,7 +109,7 @@ function install_plugin(){
   # get plugin index page and find the most current version, which is the last
   # list element (<li><a href=...) on the index page
   wget -q -O $SCRAPE_FILE $INDEX_URL
-  jar_ver=$(/bin/grep "$JAR_SEARCH" $SCRAPE_FILE | tail -n 1)
+  jar_ver=$(grep "$JAR_SEARCH" $SCRAPE_FILE | tail -n 1)
   jar_ver=${jar_ver%;*}        # delete trailing ';jsessionid...</a></li>'
   jar_ver=${jar_ver##*hadoop/} # delete from beginning to last "hadoop/"
   # now jar_ver contains the most recent plugin jar version string
@@ -125,11 +125,11 @@ function install_plugin(){
 
   display "-- Installing gluster-hadoop plug-in from $jar..." $LOG_INFO
   # create target dirs if they does not exist
-  [[ -d $USR_JAVA_DIR ]]    || /bin/mkdir -p $USR_JAVA_DIR
-  [[ -d $HADOOP_JAVA_DIR ]] || /bin/mkdir -p $HADOOP_JAVA_DIR
+  [[ -d $USR_JAVA_DIR ]]    || mkdir -p $USR_JAVA_DIR
+  [[ -d $HADOOP_JAVA_DIR ]] || mkdir -p $HADOOP_JAVA_DIR
 
   # copy jar and create symlink
-  out=$(/bin/cp -uf $jar $USR_JAVA_DIR 2>&1)
+  out=$(cp -uf $jar $USR_JAVA_DIR 2>&1)
   if (( $? != 0 )) ; then
     display "  Copy of plug-in failed" $LOG_FORCE
     exit 5
@@ -153,7 +153,7 @@ function get_ambari_repo(){
   local REPO_URL="http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.2.3.7/$REPO"
   local out; local err
 
-  [[ -d $REPO_DIR ]] || /bin/mkdir -p $REPO_DIR
+  [[ -d $REPO_DIR ]] || mkdir -p $REPO_DIR
 
   out=$(wget $REPO_URL -O $REPO_PATH)
   err=$?
@@ -409,7 +409,7 @@ function verify_fuse(){
 
   # if the fuse repo file exists and contains the "fedora-fuse" then assume
   # that the fuse patch has already been installed
-  [[ -f "$FUSE_REPO" && -n "$(/bin/grep -s $FEDORA_FUSE $FUSE_REPO)" ]] && {
+  [[ -f "$FUSE_REPO" && -n "$(grep -s $FEDORA_FUSE $FUSE_REPO)" ]] && {
     display "   ... verified" $LOG_DEBUG;
     return;
   }
@@ -485,19 +485,19 @@ function sudoers(){
 
   if [[ ! -d "$SUDOER_DIR" ]] ; then
     display "   Creating $SUDOER_DIR..." $LOG_DEBUG
-    /bin/mkdir -p $SUDOER_DIR
+    mkdir -p $SUDOER_DIR
   fi
 
-  if ! /bin/grep -qs $mapred $SUDOER_PATH ; then
+  if ! grep -qs $mapred $SUDOER_PATH ; then
     display "   Appending \"$MAPRED_SUDOER\" to $SUDOER_PATH" $LOG_INFO
     echo "$MAPRED_SUDOER" >> $SUDOER_PATH
   fi
-  if ! /bin/grep -qs $yarn $SUDOER_PATH ; then
+  if ! grep -qs $yarn $SUDOER_PATH ; then
     display "   Appending \"$YARN_SUDOER\" to $SUDOER_PATH" $LOG_INFO
     echo "$YARN_SUDOER"  >> $SUDOER_PATH
   fi
 
-  out=$(/bin/chmod $SUDOER_PERM $SUDOER_PATH 2>&1)
+  out=$(chmod $SUDOER_PERM $SUDOER_PATH 2>&1)
   display "$out" $LOG_DEBUG
 }
 
@@ -635,7 +635,7 @@ function install_common(){
   display "-- Setting up IP -> hostname mapping" $LOG_SUMMARY
   fixup_etc_hosts_file
   echo $NODE >/etc/hostname
-  /bin/hostname $NODE
+  hostname $NODE
 
   # set up sudoers file for mapred and yarn users
   sudoers
@@ -713,7 +713,7 @@ function install_mgmt(){
 
 ## ** main ** ##
 echo
-display "$(/bin/date). Begin: prep_node" $LOG_REPORT
+display "$(date). Begin: prep_node" $LOG_REPORT
 
 if [[ ! -d $DEPLOY_DIR ]] ; then
   display "$NODE: Directory '$DEPLOY_DIR' missing on $(hostname)" $LOG_FORCE
@@ -721,7 +721,7 @@ if [[ ! -d $DEPLOY_DIR ]] ; then
 fi
 
 cd $DEPLOY_DIR
-/bin/ls >/dev/null
+ls >/dev/null
 if (( $? != 0 )) ; then
   display "$NODE: No files found in $DEPLOY_DIR" $LOG_FORCE 
   exit -1
@@ -735,7 +735,7 @@ install_common
 [[ $STORAGE_INSTALL == true ]] && install_storage
 ##[[ $MGMT_INSTALL == true    ]] && install_mgmt ##no ambari support for now...
 
-display "$(/bin/date). End: prep_node" $LOG_REPORT
+display "$(date). End: prep_node" $LOG_REPORT
 
 [[ -n "$REBOOT_REQUIRED" ]] && exit 99 # tell install.sh a reboot is needed
 exit 0
