@@ -454,14 +454,15 @@ EOF
     display "ERROR: install FUSE error $err" $LOG_FORCE
     exit 29
   fi
-  out=$(yum -y --disablerepo='*' --enablerepo="$FEDORA_FUSE" --nogpgcheck \
-	downgrade kernel-headers)
-  err=$?
-  display "downgrade kernel hdrs: $out" $LOG_DEBUG
-  if (( err != 0 )) ; then
-    display "ERROR: downgrade FUSE error $err" $LOG_FORCE
-    exit 30
-  fi
+  # skip downgrade for now -- seems to intermittently hang on various mirrors
+  #out=$(yum -y --disablerepo='*' --enablerepo="$FEDORA_FUSE" --nogpgcheck \
+	#downgrade kernel-headers)
+  #err=$?
+  #display "downgrade kernel hdrs: $out" $LOG_DEBUG
+  #if (( err != 0 )) ; then
+    #display "ERROR: downgrade FUSE error $err" $LOG_FORCE
+    #exit 30
+  #fi
   echo
   REBOOT_REQUIRED=true
 }
