@@ -144,8 +144,8 @@ function read_verify_local_hosts_file(){
     # regular expression to validate ip addresses
     local VALID_IP_RE='^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$'
 
-    # regular expression to validate hostnames
-    local VALID_HOSTNAME_RE='^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$'
+    # regular expression to validate hostnames (host is down-cased)
+    local VALID_HOSTNAME_RE='^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$'
 
     # read hosts file, skip comments and blank lines, parse out hostname and ip
     read -a hosts_ary <<< $(sed '/^ *#/d;/^ *$/d;s/#.*//' $HOSTS_FILE)
@@ -170,6 +170,12 @@ function read_verify_local_hosts_file(){
 	((i++))
 	host=${hosts_ary[$i]}
         bugout "host = $host"
+
+        # down-case if any upper-case letters in host
+        if [[ "$host" =~ [A-Z]+ ]] ; then
+          bugout "   ...down-casing $host"
+          host=${host,,} # down-case
+        fi
 
 	# validate basic hostname syntax
  	if [[ ! $host =~ $VALID_HOSTNAME_RE ]] ; then

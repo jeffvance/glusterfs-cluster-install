@@ -40,7 +40,7 @@
   IMPORTANT: the node order in the hosts file is important. Assuming the Gluster
   volume is created with replica 2 then each pair of lines in hosts represents
   replica pairs. For example, the first 2 lines in hosts are replica pairs, as
-  are the next two lines, etc.
+  are the next two lines, etc. Hostnames are expected to be lower-case.
 
   Also:
   - passwordless SSH is required between the installation node and each storage
