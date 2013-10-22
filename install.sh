@@ -53,7 +53,7 @@
 
 # set global variables
 SCRIPT=$(basename $0)
-INSTALL_VER='0.10'   # self version
+INSTALL_VER='0.11'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/glusterfs-cluster-install/" # on each node
@@ -345,7 +345,7 @@ function verify_local_deploy_setup(){
 
         # verify connectivity from localhost to data node. Note: ip used since
 	# /etc/hosts may not be set up to map ip to hostname
-	ssh -q -oBatchMode=yes root@$ip exit
+	ssh -q -oBatchMode=yes -oStrictHostKeyChecking=no root@$ip exit
         if (( $? != 0 )) ; then
 	  errmsg+=" * $HOSTS_FILE record $((i/2)):\n   Cannot connect via password-less ssh to \"$host\"\n"
 	  ((errcnt++))
@@ -398,7 +398,7 @@ function report_deploy_values(){
   local OS
 
   # assume 1st node is representative
-  OS="$(ssh root@$firstNode cat $OS_RELEASE)"
+  OS="$(ssh -oStrictHostKeyChecking=no root@$firstNode cat $OS_RELEASE)"
  
   display
   display "OS:                   $OS" $LOG_REPORT
@@ -450,10 +450,10 @@ function cleanup(){
   # 1) umount vol on every node, if mounted
   display "  -- un-mounting $GLUSTER_MNT on all nodes..." $LOG_INFO
   for node in "${HOSTS[@]}"; do
-      out=$(ssh root@$node "
+      out="$(ssh -oStrictHostKeyChecking=no root@$node "
           if grep -qs $GLUSTER_MNT /proc/mounts ; then
             umount $GLUSTER_MNT
-          fi")
+          fi")"
       [[ -n "$out" ]] && display "$node: umount: $out" $LOG_DEBUG
   done
 
@@ -462,7 +462,7 @@ function cleanup(){
   display "  -- from node $firstNode:"         $LOG_INFO
   display "       stopping $VOLNAME volume..." $LOG_INFO
   display "       deleting $VOLNAME volume..." $LOG_INFO
-  out=$(ssh root@$firstNode "
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode "
       gluster volume status $VOLNAME >& /dev/null
       if (( \$? == 0 )); then # assume volume started
         gluster --mode=script volume stop $VOLNAME 2>&1
@@ -471,19 +471,21 @@ function cleanup(){
       if (( \$? == 0 )); then # assume volume created
         gluster --mode=script volume delete $VOLNAME 2>&1
       fi
-  ")
+  ")"
   display "$out" $LOG_DEBUG
 
   # 4) detach nodes if trusted pool created, on all but first node
   # note: peer probe hostname cannot be self node
-  out=$(ssh root@$firstNode "gluster peer status|head -n 1")
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode \
+	"gluster peer status|head -n 1")"
   # detach nodes if a pool has been already been formed
   if [[ -n "$out" && ${out##* } > 0 ]] ; then # got output, last tok=# peers
     display "  -- from node $firstNode:" $LOG_INFO
     display "       detaching all other nodes from trusted pool..." $LOG_INFO
     out=''
     for (( i=1; i<$NUMNODES; i++ )); do
-      out+=$(ssh root@$firstNode "gluster peer detach ${HOSTS[$i]} 2>&1")
+      out+="$(ssh -oStrictHostKeyChecking=no root@$firstNode \
+	"gluster peer detach ${HOSTS[$i]} 2>&1")"
       out+="\n"
     done
   fi
@@ -498,14 +500,14 @@ function cleanup(){
   display "       rm $BRICK_DIR and $MAPRED_SCRATCH_DIR..." $LOG_INFO
   out=''
   for node in "${HOSTS[@]}"; do
-      out+=$(ssh root@$node "
+      out+="$(ssh -oStrictHostKeyChecking=no root@$node "
           rm -rf $GLUSTER_MNT 2>&1
           if grep -qs $BRICK_DIR /proc/mounts ; then
             umount $BRICK_DIR 2>&1
           fi
           rm -rf $BRICK_DIR 2>&1
           rm -rf $MAPRED_SCRATCH_DIR 2>&1
-      ")
+      ")"
       out+="\n"
   done
   display "$out" $LOG_DEBUG
@@ -522,7 +524,8 @@ function verify_pool_created(){
   local out; local i=0; local LIMIT=10
 
   while (( i < LIMIT )) ; do # don't loop forever
-      out=$(ssh root@$firstNode "gluster peer status|tail -n 1") # "State:"
+      out="$(ssh -oStrictHostKeyChecking=no root@$firstNode \
+	"gluster peer status|tail -n 1")" # "State:"
       [[ -n "$out" && "${out#* }" == "$DESIRED_STATE" ]] && break
       sleep 1
      ((i++))
@@ -545,7 +548,8 @@ function verify_vol_created(){
   local i=0; local LIMIT=10
 
   while (( i < LIMIT )) ; do # don't loop forever
-      ssh root@$firstNode "gluster volume info $VOLNAME >& /dev/null"
+      ssh -oStrictHostKeyChecking=no root@$firstNode \
+	"gluster volume info $VOLNAME >& /dev/null"
       (( $? == 0 )) && break
       sleep 1
       ((i++))
@@ -572,12 +576,11 @@ function verify_vol_started(){
 
   while (( i < LIMIT )) ; do # don't loop forever
       # grep for Online status != Y
-      rtn=$(ssh root@$firstNode "
+      rtn="$(ssh -oStrictHostKeyChecking=no root@$firstNode "
 	gluster volume status $VOLNAME detail 2>/dev/null |
 	 	grep $FILTER |
 		grep -v '$ONLINE' |
-		wc -l
-	")
+		wc -l")"
       (( rtn == 0 )) && break # exit loop
       sleep 1
       ((i++))
@@ -601,12 +604,14 @@ function create_trusted_pool(){
   # note: peer probe hostname cannot be self node
   out=''
   for (( i=1; i<$NUMNODES; i++ )); do # starting at 1, not 0
-      out+=$(ssh root@$firstNode "gluster peer probe ${HOSTS[$i]} 2>&1")
+      out+="$(ssh -oStrictHostKeyChecking=no root@$firstNode \
+	"gluster peer probe ${HOSTS[$i]} 2>&1")"
       out+="\n"
   done
   display "$out" $LOG_DEBUG
 
-  out=$(ssh root@$firstNode 'gluster peer status 2>&1')
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode \
+	'gluster peer status 2>&1')"
   display "$out" $LOG_DEBUG
 }
 
@@ -650,24 +655,27 @@ function setup(){
   for (( i=0; i<$NUMNODES; i++ )); do
       node="${HOSTS[$i]}"
       ip="${HOST_IPS[$i]}"
-      out="$(ssh root@$node "mkfs -t xfs -i size=512 -f $BRICK_DEV 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mkfs -t xfs -i size=512 -f $BRICK_DEV 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkfs.xfs: $out" $LOG_FORCE; exit 9; }
       display "mkfs.xfs: $out" $LOG_DEBUG
 
       # volname dir under brick by convention
-      out="$(ssh root@$node "mkdir -p $BRICK_MNT 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mkdir -p $BRICK_MNT 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $BRICK_MNT: $out" $LOG_FORCE; exit 11; }
       display "mkdir $BRICK_MNT: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "mkdir -p $GLUSTER_MNT 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mkdir -p $GLUSTER_MNT 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $GLUSTER_MNT: $out" $LOG_FORCE; exit 13; }
       display "mkdir $GLUSTER_MNT: $out" $LOG_DEBUG
 
       # append brick and gluster mounts to fstab
-      out="$(ssh root@$node "
+      out="$(ssh -oStrictHostKeyChecking=no root@$node "
 	if ! grep -qs $BRICK_DIR /etc/fstab ; then
           echo '$BRICK_DEV $BRICK_DIR xfs  $BRICK_MNT_OPTS  0 0' >>/etc/fstab
 	fi
@@ -683,12 +691,14 @@ function setup(){
       # mounted; otherwise, mapred dir will be "hidden" by the mount.
       # Also, permissions and owner must be set *after* the gluster dir 
       # is mounted for the same reason -- see below.
-      out="$(ssh root@$node "mount $BRICK_DIR 2>&1")" # mount via fstab
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mount $BRICK_DIR 2>&1")" # mount via fstab
       (( $? != 0 )) && {
 	display "ERROR: $node: mount $BRICK_DIR: $out" $LOG_FORCE; exit 17; }
       display "append fstab: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "mkdir -p $MAPRED_SCRATCH_DIR 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mkdir -p $MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $MAPRED_SCRATCH_DIR: $out" $LOG_FORCE;
 	exit 19; }
@@ -706,16 +716,14 @@ function setup(){
   verify_pool_created
 
   # create vol
-  out=$(ssh root@$firstNode "
-	gluster volume create $VOLNAME replica $REPLICA_CNT $bricks 2>&1
-  ")
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode "
+	gluster volume create $VOLNAME replica $REPLICA_CNT $bricks 2>&1")"
   display "$out" $LOG_DEBUG
   verify_vol_created
 
   # start vol
-  out=$(ssh root@$firstNode "
-	gluster --mode=script volume start $VOLNAME 2>&1
-  ")
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode "
+	gluster --mode=script volume start $VOLNAME 2>&1")"
   display "$out" $LOG_DEBUG
   verify_vol_started
 
@@ -731,19 +739,21 @@ function setup(){
   # Note: ownership and permissions must be set *afer* the gluster vol is
   #       mounted.
   for node in "${HOSTS[@]}"; do
-      out="$(ssh root@$node "mount $GLUSTER_MNT 2>&1")" # from fstab
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mount $GLUSTER_MNT 2>&1")" # from fstab
       (( $? != 0 )) && {
 	display "ERROR: $node: mount $GLUSTER_MNT: $out" $LOG_FORCE; exit 21; }
       display "mount $GLUSTER_MNT: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "mkdir -p $MAPRED_SYSTEM_DIR 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"mkdir -p $MAPRED_SYSTEM_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: mkdir $MAPRED_SYSTEM_DIR: $out" $LOG_FORCE;
 	exit 23; }
       display "mkdir $MAPRED_SYSTEM_DIR: $out" $LOG_DEBUG
 
       # create mapred scratch dir and gluster mnt owner and group
-      out="$(ssh root@$node "
+      out="$(ssh -oStrictHostKeyChecking=no root@$node "
 	if ! grep -qsi ^$GROUP: /etc/group ; then
 	  groupadd $GROUP 2>&1 # note: no password, no explicit GID!
 	fi")"
@@ -751,7 +761,7 @@ function setup(){
 	display "ERROR: $node: groupadd $GROUP: $out" $LOG_FORCE; exit 25; }
       display "groupadd $GROUP: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "
+      out="$(ssh -oStrictHostKeyChecking=no root@$node "
 	if ! grep -qsi ^$OWNER: /etc/passwd ; then
 	  # add user but with no password and no hard-coded UID
 	  useradd --system -g $GROUP $OWNER 2>&1
@@ -760,14 +770,14 @@ function setup(){
 	display "ERROR: $node: useradd $OWNER: $out" $LOG_FORCE; exit 27; }
       display "useradd $OWNER: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "chown -R $OWNER:$GROUP $GLUSTER_MNT \
-	$MAPRED_SCRATCH_DIR 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"chown -R $OWNER:$GROUP $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: chown $OWNER:$GROUP: $out" $LOG_FORCE; exit 30; }
       display "chown $OWNER:$GROUP: $out" $LOG_DEBUG
 
-      out="$(ssh root@$node "chmod -R $PERMISSIONS  $GLUSTER_MNT \
-	$MAPRED_SCRATCH_DIR 2>&1")"
+      out="$(ssh -oStrictHostKeyChecking=no root@$node \
+	"chmod -R $PERMISSIONS  $GLUSTER_MNT $MAPRED_SCRATCH_DIR 2>&1")"
       (( $? != 0 )) && {
 	display "ERROR: $node: chmod $GLUSTER_MNT: $out" $LOG_FORCE; exit 33; }
       display "chmod $GLUSTER_MNT: $out" $LOG_DEBUG
@@ -808,7 +818,7 @@ function install_nodes(){
 
     # copy the data subdir to each node...
     # use ip rather than node for scp and ssh until /etc/hosts is set up
-    ssh root@$ip "
+    ssh -oStrictHostKeyChecking=no root@$ip "
 	rm -rf $REMOTE_INSTALL_DIR
 	mkdir -p $REMOTE_INSTALL_DIR"
     display "-- Copying data install files..." $LOG_INFO
@@ -818,7 +828,8 @@ function install_nodes(){
 
     # prep_node.sh may apply the FUSE patch on storage node in which case the
     # node will need to be rebooted.
-    ssh root@$ip $REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
+    ssh -oStrictHostKeyChecking=no root@$ip \
+	$REMOTE_INSTALL_DIR$PREP_SH $node $install_storage \
 	$install_mgmt "\"${HOSTS[@]}\"" "\"${HOST_IPS[@]}\"" $MGMT_NODE \
 	$VERBOSE $PREP_NODE_LOG_PATH $REMOTE_INSTALL_DIR
     err=$?
@@ -897,7 +908,7 @@ function reboot_nodes(){
   display "-- $num $msg will be rebooted..." $LOG_SUMMARY
   for ip in "${REBOOT_NODES[@]}"; do
       display "   * rebooting node: $ip..." $LOG_INFO
-      ssh root@$ip reboot -f &  # reboot asynchronously
+      ssh -oStrictHostKeyChecking=no root@$ip reboot -f &  # asynch
   done
 
   # makes sure all rebooted nodes are back up before returning
@@ -905,7 +916,7 @@ function reboot_nodes(){
       for i in "${!REBOOT_NODES[@]}"; do # array of non-null element indices
 	  ip=${REBOOT_NODES[$i]}         # unset leaves sparse array
 	  # if possible to ssh to ip then unset that array entry
-	  ssh -q -oBatchMode=yes root@$ip exit
+	  ssh -q -oBatchMode=yes -oStrictHostKeyChecking=no root@$ip exit
 	  if (( $? == 0 )) ; then
 	    display "   * node $ip sucessfully rebooted" $LOG_DEBUG
 	    unset REBOOT_NODES[$i] # null entry in array
@@ -922,11 +933,10 @@ function perf_config(){
 
   local out
 
-  out=$(ssh root@$firstNode "
+  out="$(ssh -oStrictHostKeyChecking=no root@$firstNode "
 	gluster volume set $VOLNAME quick-read off 2>&1
 	gluster volume set $VOLNAME cluster.eager-lock on 2>&1
-	gluster volume set $VOLNAME performance.stat-prefetch off 2>&1
-  ")
+	gluster volume set $VOLNAME performance.stat-prefetch off 2>&1")"
   display "$out" $LOG_DEBUG
 }
 
