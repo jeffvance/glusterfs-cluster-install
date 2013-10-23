@@ -467,19 +467,20 @@ EOF
   REBOOT_REQUIRED=true
 }
 
-# sudoers: create the /etc/sudoers.d/20_gluster file if not present, add the
-# mapred and yarn users to it (if not present) and set its permissions.
+# sudoers: create the /etc/sudoers.d/20_gluster file, add the mapred and yarn
+# users to it, and set its permissions. Note: this file will be overwritten.
 #
 function sudoers(){
 
   local SUDOER_DIR='/etc/sudoers.d'
   local SUDOER_PATH="$SUDOER_DIR/20_gluster" # 20 is somewhat arbitrary
   local SUDOER_PERM='440'
+  local SUDOER_DEFAULTS='Defaults:%hadoop !requiretty'
   local SUDOER_ACC='ALL= NOPASSWD: /usr/bin/getfattr'
   local mapred='mapred'; local yarn='yarn'
   local MAPRED_SUDOER="$mapred $SUDOER_ACC"
   local YARN_SUDOER="$yarn $SUDOER_ACC"
-  local out
+  local out; local err
 
   echo
   display "-- Prepping $SUDOER_PATH for user access exceptions..." $LOG_SUMMARY
@@ -489,17 +490,18 @@ function sudoers(){
     mkdir -p $SUDOER_DIR
   fi
 
-  if ! grep -qs $mapred $SUDOER_PATH ; then
-    display "   Appending \"$MAPRED_SUDOER\" to $SUDOER_PATH" $LOG_INFO
-    echo "$MAPRED_SUDOER" >> $SUDOER_PATH
-  fi
-  if ! grep -qs $yarn $SUDOER_PATH ; then
-    display "   Appending \"$YARN_SUDOER\" to $SUDOER_PATH" $LOG_INFO
-    echo "$YARN_SUDOER"  >> $SUDOER_PATH
-  fi
+  display "   Appending \"$MAPRED_SUDOER\" and \"$YARN_SUDOER\" to $SUDOER_PATH" $LOG_INFO
+  echo "$SUDOER_DEFAULTS" > $SUDOER_PATH # create/overwrite file
+  echo "$MAPRED_SUDOER"  >> $SUDOER_PATH
+  echo "$YARN_SUDOER"    >> $SUDOER_PATH
 
   out=$(chmod $SUDOER_PERM $SUDOER_PATH 2>&1)
-  display "$out" $LOG_DEBUG
+  err=$?
+  display "sudoer chmod: $out" $LOG_DEBUG
+  if (( err != 0 )) ; then
+    display "ERROR: sudoers chmod error $err" $LOG_FORCE
+    exit 46
+  fi
 }
 
 # install_gluster: install and start gluster. Note: if SELinux is enabled then
