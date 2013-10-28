@@ -363,37 +363,36 @@ function verify_install_ntp(){
 
   # run ntpd on reboot
   out=$(systemctl enable ntpd.service 2>&1)
-  display "systemctl enable: $out" $LOG_DEBUG
+  err=$?
+  display "systemctl enable ntpd: $out" $LOG_DEBUG
+  (( err != 0 )) &&  display "WARN: systemctl enable error $err" $LOG_FORCE
 
-  # start ntpd if not running
+  # stop ntpd so that ntpd -qg can potentially do a large time change
   ps -C ntpd >& /dev/null
-  if (( $? != 0 )) ; then
-    display "   Starting ntpd" $LOG_DEBUG
-    out=$(systemctl start ntpd.service 2>&1)
-    display "ntpd start: $out" $LOG_DEBUG
-    ps -C ntpd >& /dev/null # see if ntpd is running now...
-    if (( $? != 0 )) ; then
-      display "WARN: ntpd did NOT start" $LOG_FORCE
-      return # no point in doing the rest...
-    fi
+  if (( $? == 0 )) ; then
+    out=$(systemctl stop ntpd.service 2>&1)
+    display "systemctl stop ntpd: $out" $LOG_DEBUG
+    sleep 1
+    ps -C ntpd >& /dev/null # see if ntpd is stopped now...
+    (( $? == 0 )) && display "WARN: ntpd did NOT stop" $LOG_FORCE
   fi
 
   # set time now (ntpdate is being deprecated)
+  # note: ntpd can't be running...
   out=$(ntpd -qg 2>&1)
   err=$?
   display "ntpd -qg: $out" $LOG_DEBUG
   (( err != 0 )) && display "WARN: ntpd -qg (aka ntpdate) error $err" $LOG_FORCE
 
-  # report ntp synchronization state
-  ntpstat >& /dev/null
+  # start ntpd
+  out=$(systemctl start ntpd.service 2>&1)
   err=$?
-  if (( err == 0 )) ; then 
-    display "   NTP is synchronized..." $LOG_DEBUG
-  elif (( $err == 1 )) ; then
-    display "   NTP is NOT synchronized..." $LOG_INFO
-  else
-    display "   WARNING: NTP state is indeterminant..." $LOG_FORCE
-  fi
+  display "systemctl start ntpd: $out" $LOG_DEBUG
+  (( err != 0 )) && display "WARN: systemctl start ntpd error $err" $LOG_FORCE
+
+  # used to invoke ntpstat to verify the synchronization state, but error 1 was
+  # always returned if the above ntpd -qg cmd did a large time change. Thus, we
+  # no longer call ntpstat since the node will "realtively" soon sync up.
 }
 
 # verify_fuse: verify this node has the correct kernel FUSE patch installed. If
