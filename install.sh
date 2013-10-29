@@ -816,12 +816,11 @@ function install_nodes(){
     local install_mgmt="$4"; local err
     local FILES_TO_COPY="$PREP_SH"
 
-    # copy the data subdir to each node...
     # use ip rather than node for scp and ssh until /etc/hosts is set up
     ssh -oStrictHostKeyChecking=no root@$ip "
 	rm -rf $REMOTE_INSTALL_DIR
 	mkdir -p $REMOTE_INSTALL_DIR"
-    display "-- Copying data install files..." $LOG_INFO
+    display "-- Copying node-specific install files..." $LOG_INFO
     out=$(script -q -c "scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR")
     #out=$(scp $FILES_TO_COPY root@$ip:$REMOTE_INSTALL_DIR)
     display "scp: $out" $LOG_DEBUG
