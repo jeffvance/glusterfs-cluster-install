@@ -53,7 +53,7 @@
 
 # set global variables
 SCRIPT=$(basename $0)
-INSTALL_VER='0.13'   # self version
+INSTALL_VER='0.14'   # self version
 INSTALL_DIR=$PWD     # name of deployment (install-from) dir
 INSTALL_FROM_IP=$(hostname -i)
 REMOTE_INSTALL_DIR="/tmp/glusterfs-cluster-install/" # on each node
@@ -275,10 +275,10 @@ function parse_cmd(){
   # end of temp code...
 }
 
-# verify_local_deploy_setup: make sure the expected deploy files are in
-# place. Collect all detected setup errors together (rather than one at a 
-# time) for better usability. Validate format and size of hosts file.
-# Verify connectivity between localhost and each data/storage node. Assign
+# verify_local_deploy_setup: make sure the user is root and that the expected
+# deploy files are in place. Collect all detected setup errors together (rather
+# than one at a time) for better usability. Validate format and size of hosts
+# file. Verify connectivity between localhost and each data/storage node. Assign
 # global HOSTS, HOST_IPS, and MGMT_NODE variables.
 #
 function verify_local_deploy_setup(){
@@ -367,6 +367,12 @@ function verify_local_deploy_setup(){
   }
 
   # main #
+  #      #
+  if (( UID != 0 )) ; then
+    errmsg+=" * Must be root to run this script.\n"
+    ((errcnt++))
+  fi
+
   if [[ ! -f $HOSTS_FILE ]] ; then
     errmsg+=" * \"$HOSTS_FILE\" file is missing.\n   This file contains a list of IP address followed by hostname, one\n   pair per line. Use \"hosts.example\" as an example.\n"
     ((errcnt++))
@@ -853,8 +859,8 @@ function install_nodes(){
     fi
   }
 
-  ## main ##
-
+  # main #
+  #      #
   for (( i=0; i<$NUMNODES; i++ )); do
       node=${HOSTS[$i]}; ip=${HOST_IPS[$i]}
       echo
@@ -960,7 +966,8 @@ function reboot_self(){
 }
 
 
-## ** main ** ##
+# main #
+#      #
 echo
 parse_cmd $@
 
